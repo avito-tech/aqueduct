@@ -1,0 +1,13 @@
+{
+  "image_size": "s",
+  "replicas": 1,
+
+  "app_type": "pipeline",
+  "nprocs": [],
+
+  "timeout": 0.25,
+  "load_time_secs": 10,
+  "success_rate": 0.99,
+  "min_rps": 15,
+  "scale_method": "replicas"
+}

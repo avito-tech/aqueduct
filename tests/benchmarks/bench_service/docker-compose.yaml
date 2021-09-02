@@ -1,0 +1,42 @@
+version: '3'
+services:
+    maas:
+        runtime: nvidia
+        build:
+          context: .
+          dockerfile: Dockerfile
+        image: maas-$USER
+        environment:
+            - TZ=MSK
+            - PYTHONUNBUFFERED=1
+            - PYTHONWARNINGS=ignore
+            - CFG_PATH=${CFG_PATH}
+            - METRICS_ENABLED=${METRICS_ENABLED}
+            - METRICS_HOST=${METRICS_HOST}
+            - METRICS_PORT=${METRICS_PORT}
+            - METRICS_PREFIX=${METRICS_PREFIX}
+
+        volumes:
+            - ./:/app
+            - ./maas/data/models:/root/.cache/torch/hub/checkpoints/
+#        deploy:
+#          resources:
+#            limits:
+#              cpus: '1'
+#              memory: 4G
+        shm_size: 8G
+        command: python -m maas.maas.app
+    maas-bench:
+        runtime: nvidia
+        image: maas-$USER
+        container_name: maas_bench_$USER
+        environment:
+          - TZ=MSK
+          - PYTHONUNBUFFERED=1
+          - PYTHONWARNINGS=ignore
+        volumes:
+          - ./:/app
+          - ./maas/data/models:/root/.cache/torch/hub/checkpoints/
+        shm_size: 8G
+        entrypoint: bash
+        tty: true

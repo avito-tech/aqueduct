@@ -1,0 +1,12 @@
+*.egg-info
+*.py[co]
+.coverage
+__pycache__
+build/
+dist/
+
+# IDE
+.idea
+
+# bench
+tests/benchmarks/bench_service/maas/data/models/

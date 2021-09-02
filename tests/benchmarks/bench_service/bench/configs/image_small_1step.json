@@ -1,0 +1,13 @@
+{
+  "image_size": "s",
+  "replicas": 2,
+
+  "app_type": "1step",
+  "nprocs": [4],
+
+  "timeout": 0.2,
+  "load_time_secs": 10,
+  "success_rate": 0.99,
+  "min_rps": 30,
+  "scale_method": "proc"
+}
