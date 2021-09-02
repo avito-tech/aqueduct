@@ -24,7 +24,7 @@ class HandlerWithError(BaseTaskHandler):
 
 
 @pytest.fixture
-async def flow_with_failed_handler():
+async def flow_with_failed_handler(loop):
     async with run_flow(Flow(HandlerWithError())) as flow:
         yield flow
 
@@ -60,14 +60,14 @@ class CatDetectorHandler(BaseTaskHandler):
 
 
 @pytest.fixture
-async def flow_with_not_batch_handler() -> Flow:
+async def flow_with_not_batch_handler(loop) -> Flow:
     """Actually the handler has batching, but batch size is one."""
     async with run_flow(Flow(CatDetectorHandler())) as flow:
         yield flow
 
 
 @pytest.fixture
-async def flow_with_batch_handler() -> Flow:
+async def flow_with_batch_handler(loop) -> Flow:
     async with run_flow(Flow(
             FlowStep(
                 CatDetectorHandler(),
@@ -103,7 +103,7 @@ class UpdateSharedArrayFieldHandler(BaseTaskHandler):
 
 
 @pytest.fixture
-async def flow_for_shared_array(array) -> Flow:
+async def flow_for_shared_array(loop, array) -> Flow:
     async with run_flow(Flow(ShareArrayHandler(array), UpdateSharedArrayFieldHandler())) as flow:
         yield flow
 
@@ -115,7 +115,7 @@ class MultiProcBatchHandler(BaseTaskHandler):
 
 
 @pytest.fixture
-async def flow_with_multiproc_bathcer():
+async def flow_with_multiproc_bathcer(loop):
     async with run_flow(
             Flow(FlowStep(MultiProcBatchHandler(), nprocs=2, batch_size=TASKS_BATCH_SIZE))
     ) as flow:
@@ -123,7 +123,6 @@ async def flow_with_multiproc_bathcer():
 
 
 class TestFlow:
-    @pytest.mark.asyncio
     async def test_process_set_result(self, simple_flow: Flow, task: Task):
         assert task.result is None
         result = await simple_flow.process(task)
@@ -137,7 +136,6 @@ class TestFlow:
         assert MAIN_PROCESS in info[queues[0]]
         assert MAIN_PROCESS in info[queues[-1]]
 
-    @pytest.mark.asyncio
     async def test_process_expired_task(self, log_file, aqueduct_logger,
                                         slow_sleep_handlers, slow_simple_flow, task):
         timeouts = [handler._handler_sec for handler in slow_sleep_handlers]
@@ -154,14 +152,12 @@ class TestFlow:
         # doesn't arrive in the third handler
         assert f'[{slow_sleep_handlers[2].__class__.__name__}] Have message' not in log_str
 
-    @pytest.mark.asyncio
     async def test_process_not_running_flow(self, simple_flow, task):
         await simple_flow.stop(graceful=False)
         with pytest.raises(NotRunningError):
             await simple_flow.process(task)
 
-    @pytest.mark.asyncio
-    async def test_process_huge_count_of_tasks(self, event_loop, simple_flow):
+    async def test_process_huge_count_of_tasks(self, simple_flow):
         """Count of tasks much more than queue size."""
         # queue size = 20
         n_tasks = 90
@@ -170,8 +166,7 @@ class TestFlow:
         res = await asyncio.gather(*coros)
         assert len(res) == n_tasks
 
-    @pytest.mark.asyncio
-    async def test_stopped_flow_due_to_terminated_step_process(self, event_loop, simple_flow: Flow, caplog):
+    async def test_stopped_flow_due_to_terminated_step_process(self, simple_flow: Flow, caplog):
         """Checks that flow and event loop were stopped when child Step process was terminated."""
         assert simple_flow.state == FlowState.RUNNING
 
@@ -183,8 +178,7 @@ class TestFlow:
         assert simple_flow.state == FlowState.STOPPED
         assert f'The process {process.pid} for {handler.__class__.__name__} handler is dead' in caplog.text
 
-    @pytest.mark.asyncio
-    async def test_stopped_flow_due_to_failed_step_process(self, event_loop, flow_with_failed_handler, task):
+    async def test_stopped_flow_due_to_failed_step_process(self, flow_with_failed_handler, task):
         """Checks that flow and event loop were stopped when child Step process finished with error."""
         assert flow_with_failed_handler.state == FlowState.RUNNING
 
@@ -194,15 +188,13 @@ class TestFlow:
 
         assert flow_with_failed_handler.state == FlowState.STOPPED
 
-    @pytest.mark.asyncio
-    async def test_stopped_flow_due_to_stop_method(self, event_loop, simple_flow):
+    async def test_stopped_flow_due_to_stop_method(self, simple_flow):
         await simple_flow.stop(graceful=False)
         await asyncio.sleep(0.5)
 
         assert simple_flow.state == FlowState.STOPPED
 
-    @pytest.mark.asyncio
-    async def test_stop_finish_task_on_graceful(self, event_loop, sleep_handlers, simple_flow, task):
+    async def test_stop_finish_task_on_graceful(self, sleep_handlers, simple_flow, task):
         """Checks that task will be processed to the end after Flow stop command with graceful mode."""
         t = asyncio.ensure_future(simple_flow.process(task))
         await asyncio.sleep(sleep_handlers[0]._handler_sec)
@@ -213,8 +205,7 @@ class TestFlow:
         assert t.result()
         assert simple_flow.state == FlowState.STOPPED
 
-    @pytest.mark.asyncio
-    async def test_stop_abort_task(self, event_loop, sleep_handlers, simple_flow, task):
+    async def test_stop_abort_task(self, sleep_handlers, simple_flow, task):
         """Checks that task will be aborted after Flow stop command without graceful mode."""
         t = asyncio.ensure_future(simple_flow.process(task))
         await asyncio.sleep(sleep_handlers[0]._handler_sec)
@@ -224,7 +215,6 @@ class TestFlow:
         assert isinstance(t.exception(), FlowError)
         assert simple_flow.state == FlowState.STOPPED
 
-    @pytest.mark.asyncio
     async def test_process_performance_without_batching(self, flow_with_not_batch_handler, tasks_batch):
         """Checks that will be received TimeoutError with not batch handler."""
         with pytest.raises(asyncio.TimeoutError):
@@ -233,7 +223,6 @@ class TestFlow:
                 timeout=CatDetector.BATCH_PROCESS_TIME,
             )
 
-    @pytest.mark.asyncio
     async def test_process_performance_with_batching(self, flow_with_batch_handler, tasks_batch):
         """Checks that all tasks will be processed on time with batch handler."""
         await asyncio.wait_for(
@@ -242,14 +231,12 @@ class TestFlow:
         )
         assert all(task.result for task in tasks_batch)
 
-    @pytest.mark.asyncio
     async def test_process_seq_batch_filling(self, tasks_batch, flow_with_multiproc_bathcer):
         """Checks that batches are being filled sequentially."""
         await asyncio.gather(*[flow_with_multiproc_bathcer.process(task) for task in tasks_batch])
         assert len(set(task.result for task in tasks_batch)) == 1
 
 
-@pytest.mark.asyncio
 async def test_segfault_due_to_update_shared_fields(array, array_sh_data, simple_flow):
     t1, t2 = BaseTask(), BaseTask()
     t1.sh_array = array_sh_data
@@ -264,7 +251,6 @@ async def test_segfault_due_to_update_shared_fields(array, array_sh_data, simple
     assert all(t1.sh_array == array)
 
 
-@pytest.mark.asyncio
 async def test_segfault_due_to_share_field_in_handler(array, flow_for_shared_array):
     t = BaseTask()
     await flow_for_shared_array.process(t)

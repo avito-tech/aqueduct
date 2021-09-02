@@ -16,6 +16,8 @@ from aqueduct.logger import LOGGER_NAME
 from aqueduct.shm import NPArraySharedData
 from aqueduct.task import BaseTask
 
+pytest_plugins = 'aiohttp.pytest_plugin'
+
 # необходимо для корректной работы тестов на MacOS
 mp.set_start_method('fork')
 
@@ -172,12 +174,12 @@ async def run_flow(flow: Flow):
 
 
 @pytest.fixture
-async def simple_flow(sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
+async def simple_flow(loop, sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
     async with run_flow(Flow(*sleep_handlers)) as flow:
         yield flow
 
 
 @pytest.fixture
-async def slow_simple_flow(slow_sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
+async def slow_simple_flow(loop, slow_sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
     async with run_flow(Flow(*slow_sleep_handlers)) as flow:
         yield flow

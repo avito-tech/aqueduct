@@ -73,7 +73,7 @@ def to_statsd_metrics_exporter(statsd_metrics_buffer) -> ToStatsDMetricsExporter
 
 
 @pytest.fixture
-async def flow_with_exporter(sleep_handlers: Tuple[SleepHandler, ...],
+async def flow_with_exporter(loop, sleep_handlers: Tuple[SleepHandler, ...],
                              to_statsd_metrics_exporter) -> Flow:
     async with run_flow(Flow(*sleep_handlers, metrics_exporter=to_statsd_metrics_exporter)) as flow:
         yield flow
@@ -85,13 +85,13 @@ def dummy_metrics_exporter() -> DummyExporter:
 
 
 @pytest.fixture
-async def flow_without_metrics(sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
+async def flow_without_metrics(loop, sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
     async with run_flow(Flow(*sleep_handlers, metrics_enabled=False)) as flow:
         yield flow
 
 
 @pytest.fixture
-async def flow_with_batching_to_statsd(to_statsd_metrics_exporter) -> Flow:
+async def flow_with_batching_to_statsd(loop, to_statsd_metrics_exporter) -> Flow:
     async with run_flow(
             Flow(
                 FlowStep(SleepHandler(0.001), batch_size=4, batch_timeout=0.05),
@@ -101,7 +101,7 @@ async def flow_with_batching_to_statsd(to_statsd_metrics_exporter) -> Flow:
 
 
 @pytest.fixture
-async def flow_with_batching(dummy_metrics_exporter) -> Flow:
+async def flow_with_batching(loop, dummy_metrics_exporter) -> Flow:
     async with run_flow(
             Flow(
                 FlowStep(SleepHandler(0.001), batch_size=4, batch_timeout=0.05),
@@ -116,7 +116,6 @@ async def tasks() -> List[Task]:
 
 
 class TestToAvioMetricsExporter:
-    @pytest.mark.asyncio
     async def test_export(
             self,
             sleep_handlers,
@@ -136,7 +135,6 @@ class TestToAvioMetricsExporter:
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{QSIZE_PREFIX}')) == 4
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{TASKS_PREFIX}')) == 1
 
-    @pytest.mark.asyncio
     async def test_export_batch_metrics_for_avio(
             self,
             flow_with_batching_to_statsd,
@@ -150,7 +148,6 @@ class TestToAvioMetricsExporter:
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{BATCH_TIME_PREFIX}')) == 3
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{BATCH_SIZE_PREFIX}')) == 3
 
-    @pytest.mark.asyncio
     async def test_export_batch_metrics(self, dummy_metrics_exporter, flow_with_batching: Flow, tasks: List[Task]):
         await asyncio.gather(*[flow_with_batching.process(task) for task in tasks])
         await asyncio.sleep(2 * EXPORT_PERIOD)
@@ -161,7 +158,6 @@ class TestToAvioMetricsExporter:
         s1, s2, s3 = (sizes for name, sizes in metrics.batch_sizes.items)
         assert s1 == s2 == 4 and s3 == 2
 
-    @pytest.mark.asyncio
     async def test_export_disabled_metrics(self, sleep_handlers, flow_without_metrics: Flow, task):
         await flow_without_metrics.process(task)
         # wait for metrics export
