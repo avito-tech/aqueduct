@@ -13,7 +13,7 @@ Feel free to ask questions in telegram [t.me/avito-ml](https://t.me/avito-ml)
 
 ## Get started
 
-Simple example how to start with aqueduct using aiohttp. For bettera examples see [examples](examples)
+Simple example how to start with aqueduct using aiohttp. For better examples see [examples](examples)
 ```python
 from aiohttp import web
 from aqueduct import Flow, FlowStep, BaseTaskHandler, BaseTask
