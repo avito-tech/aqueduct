@@ -3,7 +3,7 @@
 Framework for creating efficient data processing pipelines.
 
 ## Contact
-Feel free to ask questions in telegram [t.me/avito-ml](https://t.me/avito-ml)
+Feel free to ask questions in telegram [t.me/avito-ml](https://t.me/avito_ml)
 
 ## Key Features
 
