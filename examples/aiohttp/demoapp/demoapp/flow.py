@@ -1,5 +1,3 @@
-import asyncio
-import sys
 from typing import (
     List,
     Optional,
@@ -7,13 +5,17 @@ from typing import (
 )
 
 import torch
-from aiohttp import web
-from aqueduct.flow import Flow, FlowStep
-from aqueduct.handler import BaseTaskHandler
-from aqueduct.logger import log
-from aqueduct.task import BaseTask
 
-from .pipeline import Classifier, default_producer
+from aqueduct import (
+    BaseTask,
+    BaseTaskHandler,
+    Flow,
+    FlowStep,
+)
+from .pipeline import (
+    Classifier,
+    default_producer,
+)
 
 
 class Task(BaseTask):
@@ -67,23 +69,3 @@ def get_flow() -> Flow:
         FlowStep(PostProcessorHandler()),
         metrics_enabled=False,
     )
-
-
-async def observe_flow(app):
-    asyncio.ensure_future(check_flow_state(app))
-
-
-async def stop_flow(app):
-    flow: Flow = app['flow']
-    await flow.stop()
-
-
-async def check_flow_state(app: web.Application, check_interval: float = 1.0):
-    """Следит за состоянием Flow и завершает работу сервиса, если Flow не запущен."""
-    flow: Flow = app['flow']
-    while flow.is_running:
-        await asyncio.sleep(check_interval)
-    log.info('Flow is not running, application will be stopped')
-    await app.shutdown()
-    await app.cleanup()
-    sys.exit(1)

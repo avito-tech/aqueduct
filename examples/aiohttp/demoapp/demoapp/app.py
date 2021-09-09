@@ -1,18 +1,20 @@
 from aiohttp import web
 
+from aqueduct.integrations.aiohttp import (
+    FLOW_NAME,
+    AppIntegrator,
+)
 from .flow import (
     Flow,
     Task,
     get_flow,
-    observe_flow,
-    stop_flow,
 )
 
 
 class ClassifyView(web.View):
     @property
     def flow(self) -> Flow:
-        return self.request.app['flow']
+        return self.request.app[FLOW_NAME]
 
     async def post(self):
         im = await self.request.read()
@@ -23,13 +25,9 @@ class ClassifyView(web.View):
 
 def prepare_app() -> web.Application:
     app = web.Application(client_max_size=0)
-    flow = get_flow()
-    app['flow'] = flow
     app.router.add_post('/classify', ClassifyView)
 
-    flow.start()
-    app.on_startup.append(observe_flow)
-    app.on_shutdown.append(stop_flow)
+    AppIntegrator(app).add_flow(get_flow())
 
     return app
 

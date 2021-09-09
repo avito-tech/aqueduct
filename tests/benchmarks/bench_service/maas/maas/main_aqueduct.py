@@ -2,12 +2,14 @@ from typing import Optional
 
 from aiohttp import web
 
+from aqueduct.integrations.aiohttp import (
+    AppIntegrator,
+    FLOW_NAME,
+)
 from .flow import (
     Flow,
     Task,
     get_flow,
-    observe_flow,
-    stop_flow,
 )
 from .flow_metrics import (
     StatsDMetricsBuffer,
@@ -20,7 +22,7 @@ from .image_storage import ImageStorage
 class ClassifyView(web.View):
     @property
     def flow(self) -> Flow:
-        return self.request.app['flow']
+        return self.request.app[FLOW_NAME]
 
     @property
     def image_storage(self) -> ImageStorage:
@@ -44,7 +46,6 @@ async def get_flow_app(
         flow = get_flow([1, 1, 1])
     if app is None:
         app = web.Application(client_max_size=0)
-    app['flow'] = flow
     app['image_storage'] = ImageStorage()
     app.router.add_post('/classify', ClassifyView)
 
@@ -53,9 +54,7 @@ async def get_flow_app(
         app.on_startup.append(connect_statsd_client)
         app.on_cleanup.append(close_statsd_client)
 
-    flow.start()
-    app.on_startup.append(observe_flow)
-    app.on_shutdown.append(stop_flow)
+    AppIntegrator(app).add_flow(flow)
 
     return app
 

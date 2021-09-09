@@ -6,13 +6,23 @@ from typing import List
 import numpy as np
 import pytest
 
-from aqueduct.exceptions import FlowError, NotRunningError
-from aqueduct.flow import Flow, FlowState, FlowStep
+from aqueduct.exceptions import (
+    FlowError,
+    NotRunningError,
+)
+from aqueduct.flow import (
+    Flow,
+    FlowState,
+    FlowStep,
+)
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.metrics import MAIN_PROCESS
-from aqueduct.multiprocessing import ProcessContext
 from aqueduct.task import BaseTask
-from tests.unit.conftest import run_flow, Task
+from tests.unit.conftest import (
+    Task,
+    run_flow,
+    stop_flow,
+)
 from tests.unit.test_shm import ArrayFieldTask
 
 TASKS_BATCH_SIZE = 16
@@ -170,10 +180,7 @@ class TestFlow:
         """Checks that flow and event loop were stopped when child Step process was terminated."""
         assert simple_flow.state == FlowState.RUNNING
 
-        handler, context = next(iter(simple_flow._contexts.items()))  # type: BaseTaskHandler, ProcessContext
-        process = context.processes[0]
-        process.terminate()
-        await asyncio.sleep(1)
+        process, handler = await stop_flow(simple_flow)
 
         assert simple_flow.state == FlowState.STOPPED
         assert f'The process {process.pid} for {handler.__class__.__name__} handler is dead' in caplog.text
