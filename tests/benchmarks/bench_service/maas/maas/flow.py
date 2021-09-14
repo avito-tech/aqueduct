@@ -1,17 +1,24 @@
-import asyncio
 import logging
-import sys
-from typing import List, Optional, Tuple
+from typing import (
+    List,
+    Optional,
+    Tuple,
+)
 
 import torch
-from aiohttp import web
-from aqueduct.flow import Flow, FlowStep
+
+from aqueduct.flow import (
+    Flow,
+    FlowStep,
+)
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.logger import log
 from aqueduct.metrics.export import Exporter
 from aqueduct.task import BaseTask
-
-from .models import Classifier, default_producer
+from .models import (
+    Classifier,
+    default_producer,
+)
 
 log.setLevel(logging.INFO)
 
@@ -78,26 +85,6 @@ class PipelineHandler(BaseTaskHandler):
             task.image = self.pre_proc_model.process(task.image)
             task.pred = self.classifier_model.process_list(data=[task.image])[0]
             task.h_pred = self.post_proc_model.process(task.pred)
-
-
-async def observe_flow(app):
-    asyncio.ensure_future(check_flow_state(app))
-
-
-async def stop_flow(app):
-    flow: Flow = app['flow']
-    await flow.stop()
-
-
-async def check_flow_state(app: web.Application, check_interval: float = 1.0):
-    """Следит за состоянием Flow и завершает работу сервиса, если Flow не запущен."""
-    flow: Flow = app['flow']
-    while flow.is_running:
-        await asyncio.sleep(check_interval)
-    log.info('Flow is not running, application will be stopped')
-    await app.shutdown()
-    await app.cleanup()
-    sys.exit(1)
 
 
 def get_flow(nprocs: List[int], metrics_exporter: Optional[Exporter] = None) -> Flow:

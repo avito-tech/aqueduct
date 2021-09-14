@@ -1,3 +1,7 @@
+# 1.7.0
+- tests migrated from pytest-asyncio to pytest-aiohttp
+- added integration with aiohttp
+
 # 1.6.1
 - removed redundant files
 - added `python_requires` parameter in `setup.py`
