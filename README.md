@@ -11,67 +11,97 @@ Feel free to ask questions in telegram [t.me/avito-ml](https://t.me/avito_ml)
 - All optimisations in one library
 - Uses shared memory for transfer big data between processes
 
+
+## Main concept
+<img src=".github/concept.png" alt="concept" width="770" height="404" />
+
+
 ## Get started
 
-Simple example how to start with aqueduct using aiohttp. For better examples see [examples](examples)
+Simple example how to start with aqueduct. For a better understanding see [examples](examples).
+
 ```python
-from aiohttp import web
-from aqueduct import Flow, FlowStep, BaseTaskHandler, BaseTask
+import asyncio
+import contextlib
+from typing import Optional
+
+from aqueduct import (
+    Flow,
+    FlowStep,
+    BaseTaskHandler,
+    BaseTask,
+    log,
+)
+
+log.setLevel('ERROR')
 
 
-class MyModel:
-    """This is CPU bound model example."""
+def fib(n: int) -> int:
+    """Calculates the nth number in the Fibonacci sequence.
     
-    def process(self, number):
-        return sum(i * i for i in range(number))
+    Specially not optimal in time.
+    """
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
 
 class Task(BaseTask):
-    """Container to send arguments to model."""
-    def __init__(self, number):
+    def __init__(self, serial_number: int):
         super().__init__()
-        self.number = number
-        self.sum = None  # result will be here
-    
-class SumHandler(BaseTaskHandler):
-    """With aqueduct we need to wrap you're model."""
-    def __init__(self):
-        self._model = None
+        self.serial_number = serial_number
+        self.fib_number: Optional[int] = None
 
-    def on_start(self):
-        """Runs in child process, so memory no memory consumption in parent process."""
-        self._model = MyModel()
 
+class FibHandler(BaseTaskHandler):
     def handle(self, *tasks: Task):
-        """List of tasks because it can be batching."""
         for task in tasks:
-            task.sum = self._model.process(task.number)
-
-            
-class SumView(web.View):
-    """Simple aiohttp-view handler"""
-
-    async def post(self):
-        number = await self.request.read()
-        task = Task(int(number))
-        await self.request.app['flow'].process(task)
-        return web.json_response(data={'result': task.sum})
+            task.fib_number = fib(task.serial_number)
 
 
-def prepare_app() -> web.Application:
-    app = web.Application()
+@contextlib.contextmanager
+def debug_msg():
+    """Shows that event loop is not blocked."""
+    async def print_msg():
+        while True:
+            print('event loop is not blocked')
+            await asyncio.sleep(1)
+    f = asyncio.ensure_future(print_msg())
+    yield 
+    f.cancel()
 
-    app['flow'] = Flow(
-        FlowStep(SumHandler()),
-    )
-    app.router.add_post('/sum', SumView)
 
-    app['flow'].start()
-    return app
+@contextlib.asynccontextmanager
+async def run_flow():
+    flow = Flow(FlowStep(FibHandler(), nprocs=6), metrics_enabled=False)
+    flow.start()
+    yield flow
+    await flow.stop(graceful=False)
 
 
-if __name__ == '__main__':
-    web.run_app(prepare_app())
+async def main():
+    """Calculates 6 numbers from the Fibonacci sequence.
     
+    Thanks to Aqueduct, we do this in parallel for each number and without blocking the event loop.
+    Flow has the simplest architecture and consists of only one step with the calculation of the Fibonacci number.
+    
+    Using an Aqueduct in this case is equivalent to using the following code:
+    
+    with debug_msg():
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ProcessPoolExecutor(6) as pool:
+            tasks = [loop.run_in_executor(pool, fib, i) for i in range(30, 36)]
+            results = await asyncio.gather(*tasks)
+            print({i: fib_number for i, fib_number in zip(range(30, 36), results)})
+    """
+    with debug_msg():
+        tasks = [Task(i) for i in range(30, 36)]
+        async with run_flow() as flow:
+            await asyncio.gather(*[flow.process(task, timeout_sec=10) for task in tasks])
+        print(*[{task.serial_number: task.fib_number} for task in tasks])
+
+
+asyncio.run(main())
 ```
 
 ## Batching
