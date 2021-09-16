@@ -11,12 +11,19 @@ Feel free to ask questions in telegram [t.me/avito-ml](https://t.me/avito_ml)
 - All optimisations in one library
 - Uses shared memory for transfer big data between processes
 
+
+## Main concept
+<img src=".github/concept.png" alt="concept" width="770" height="404" />
+
+
 ## Get started
 
-Simple example how to start with aqueduct using aiohttp. For better examples see [examples](examples)
+Simple example how to start with aqueduct using aiohttp. For a better understanding see [examples](examples).
 ```python
 from aiohttp import web
-from aqueduct import Flow, FlowStep, BaseTaskHandler, BaseTask
+
+from aqueduct import BaseTask, BaseTaskHandler, Flow, FlowStep
+from aqueduct.integrations.aiohttp import AppIntegrator, FLOW_NAME
 
 
 class MyModel:
@@ -53,19 +60,15 @@ class SumView(web.View):
     async def post(self):
         number = await self.request.read()
         task = Task(int(number))
-        await self.request.app['flow'].process(task)
+        await self.request.app[FLOW_NAME].process(task)
         return web.json_response(data={'result': task.sum})
 
 
 def prepare_app() -> web.Application:
     app = web.Application()
-
-    app['flow'] = Flow(
-        FlowStep(SumHandler()),
-    )
     app.router.add_post('/sum', SumView)
+    AppIntegrator(app).add_flow(Flow(FlowStep(SumHandler())))
 
-    app['flow'].start()
     return app
 
 
