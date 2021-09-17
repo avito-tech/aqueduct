@@ -16,7 +16,7 @@ setup(
     description='Efficient data processing pipelines builder.',
     url='https://github.com/avito-tech/aqueduct',
     download_url='https://github.com/avito-tech/aqueduct/archive/refs/heads/main.zip',
-    keywords=['pipeline', 'datascience', 'learning', ],
+    keywords=['datascience', 'learning', ],
     python_requires='>=3.8',
     include_package_data=True,
     long_description=long_description,
