@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-with open('README.md') as f:
+with open('README.rst') as f:
     long_description = f.read()
 
 packages = ['aqueduct']
@@ -13,14 +13,14 @@ setup(
     license_files='LICENSE.txt',
     author='Data Science SWAT',
     author_email='UnitDataScienceSwat@avito.ru',
-    description='Efficient data processing pipelines builder.',
+    description='Builder for performance-efficient prediction.',
     url='https://github.com/avito-tech/aqueduct',
     download_url='https://github.com/avito-tech/aqueduct/archive/refs/heads/main.zip',
     keywords=['datascience', 'learning', ],
     python_requires='>=3.8',
     include_package_data=True,
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type='text/x-rst',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
