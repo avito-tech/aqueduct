@@ -21,7 +21,7 @@ from aqueduct.task import BaseTask
 from tests.unit.conftest import (
     Task,
     run_flow,
-    stop_flow,
+    terminate_worker,
 )
 from tests.unit.test_shm import ArrayFieldTask
 
@@ -180,7 +180,7 @@ class TestFlow:
         """Checks that flow and event loop were stopped when child Step process was terminated."""
         assert simple_flow.state == FlowState.RUNNING
 
-        process, handler = await stop_flow(simple_flow)
+        process, handler = await terminate_worker(simple_flow)
 
         assert simple_flow.state == FlowState.STOPPED
         assert f'The process {process.pid} for {handler.__class__.__name__} handler is dead' in caplog.text

@@ -9,29 +9,37 @@ from aiohttp import web
 
 AQUEDUCT_FLOW_NAMES = 'aqueduct_flow_names'
 FLOW_NAME = 'flow'
+FLOW_OBSERVER_NAME = 'aqueduct_flow_observer'
 
 
-async def check_flow_state(app: web.Application, check_interval: float = 1.):
-    """Monitors Flow states and shuts down the app if Flow is not running."""
+async def flow_observer(app: web.Application, check_interval: float = 1.):
+    """Monitors all Flows states and shuts down the app if some Flow is not running.
+
+    Cancel this task to properly shut down all Flows."""
     flows = {name: app[name] for name in app[AQUEDUCT_FLOW_NAMES]}
-    while True:
-        for flow_name, flow in flows.items():
-            if not flow.is_running:
-                log.info(f'Flow {flow_name} is not running, application will be stopped')
-                await app.shutdown()
-                await app.cleanup()
-                sys.exit(1)
-        await asyncio.sleep(check_interval)
+
+    # There is a specific 'protocol' for managing background task lifetime.
+    # Docs: https://docs.aiohttp.org/en/stable/web_advanced.html#background-tasks
+    try:
+        while True:
+            for flow_name, flow in flows.items():
+                if not flow.is_running:
+                    log.info(f'Flow {flow_name} is not running, application will be stopped')
+                    sys.exit(1)
+            await asyncio.sleep(check_interval)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        for flow in flows.values():
+            await flow.stop()
 
 
-async def observe_flow(app):
-    asyncio.ensure_future(check_flow_state(app))
+async def observe_all_flows(app):
+    app[FLOW_OBSERVER_NAME] = asyncio.create_task(flow_observer(app))
 
 
-async def stop_flow(app):
-    flows = [app[name] for name in app[AQUEDUCT_FLOW_NAMES]]
-    for flow in flows:  # type: Flow
-        await flow.stop()
+async def stop_all_flows(app):
+    app[FLOW_OBSERVER_NAME].cancel()
 
 
 class AppIntegrator:
@@ -41,8 +49,8 @@ class AppIntegrator:
             raise RuntimeError('AppIntegrator can be created only once. Reuse existing AppIntegrator.')
         self._app = app
         self._app[AQUEDUCT_FLOW_NAMES] = []
-        self._app.on_startup.append(observe_flow)
-        self._app.on_shutdown.append(stop_flow)
+        self._app.on_startup.append(observe_all_flows)
+        self._app.on_shutdown.append(stop_all_flows)
 
     def add_flow(self, flow: Flow, flow_name: str = FLOW_NAME, with_start: bool = True):
         if flow_name in self._app:
