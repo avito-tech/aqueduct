@@ -132,7 +132,45 @@ async def flow_with_multiproc_bathcer(loop):
         yield flow
 
 
+class SlowStartingHandler(BaseTaskHandler):
+    start_time: int
+
+    def on_start(self):
+        time.sleep(self.start_time)
+
+    def handle(self, task: Task):
+        task.result = os.getpid()
+
+
 class TestFlow:
+    async def test_waiting_for_subproccess_to_start(self, task: Task):
+        """flow.start() should block until all subprocesses fully initialized."""
+        handler = SlowStartingHandler()
+        handler.start_time = 1
+        slowest_handler = SlowStartingHandler()
+        slowest_handler.start_time = 3
+        flow = Flow(FlowStep(handler, nprocs=3), FlowStep(slowest_handler, nprocs=3))
+
+        t0 = time.time()
+        flow.start()
+        t1 = time.time()
+
+        assert t1 - t0 == pytest.approx(slowest_handler.start_time, 0.5)
+
+    async def test_waiting_timeout(self, task: Task):
+        """flow.start(timeout) should raise FlowError when starting_timeout expired."""
+        handler = SlowStartingHandler()
+        handler.start_time = 10
+        flow = Flow(FlowStep(handler, nprocs=3))
+
+        timeout = 3
+        t0 = time.time()
+        with pytest.raises(FlowError):
+            flow.start(timeout=timeout)
+        t1 = time.time()
+
+        assert t1 - t0 == pytest.approx(timeout, 0.5)
+
     async def test_process_set_result(self, simple_flow: Flow, task: Task):
         assert task.result is None
         result = await simple_flow.process(task)

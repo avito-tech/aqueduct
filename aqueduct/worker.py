@@ -130,13 +130,16 @@ class Worker:
         task.metrics.start_transfer_timer(self.step_name)
         self.queue_out.put(task)
 
-    def loop(self, pid: int):
+    def loop(self, pid: int, start_barrier: mp.Barrier):
         """Main worker loop.
 
         The code below is executed in a new process.
         """
         log.info(f'[Worker] initialising handler {self.name}')
         self._start()
+        log.info(f'[Worker] handler {self.name} ok, waiting for others to start')
+        start_barrier.wait()
+
         log.info(f'[Worker] handler {self.name} ok, starting loop')
 
         for tasks_batch in self._tasks_batches():
