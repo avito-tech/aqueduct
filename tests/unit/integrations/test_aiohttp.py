@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import aiohttp.web
 import pytest
 from aiohttp import web
-from aiohttp.test_utils import TestClient
+from aiohttp.test_utils import setup_test_loop, TestClient
 
 from aqueduct import Flow
 from aqueduct.integrations.aiohttp import (
@@ -18,9 +18,6 @@ from tests.unit.conftest import (
 
 
 async def init_app(app: web.Application):
-    # reset previous event loop in order to not conflict with other tests
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
     integrator = AppIntegrator(app)
     integrator.add_flow(Flow(SleepHandler(0.001)), with_start=True)
 
@@ -43,7 +40,7 @@ async def app_client(aiohttp_client, app_with_flow) -> TestClient:
 
 
 class TestAppIntegrator:
-    def test_app_stops_correctly(self):
+    def test_app_stops_correctly(self, loop):
         """Flow monitoring should not brake correct application stop.
 
         Real aiohttp application stops differently then aiohttp_server fixture,
@@ -63,7 +60,7 @@ class TestAppIntegrator:
         assert app.on_shutdown[0].called is True
         assert app.on_cleanup[0].called is True
 
-    def test_app_exists_on_flow_stop(self):
+    def test_app_exists_on_flow_stop(self, loop):
         async def error_exit(_):
             async def stop_task():
                 await asyncio.sleep(1)
