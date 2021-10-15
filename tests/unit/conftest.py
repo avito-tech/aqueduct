@@ -96,7 +96,7 @@ if sys.platform == 'darwin':
     queues.Queue = MultiPlatformQueue
 
 
-async def stop_flow(flow: Flow) -> Tuple[mp.process.BaseProcess, BaseTaskHandler]:
+async def terminate_worker(flow: Flow) -> Tuple[mp.process.BaseProcess, BaseTaskHandler]:
     handler, context = next(iter(flow._contexts.items()))  # type: BaseTaskHandler, ProcessContext
     process = context.processes[0]
     process.terminate()

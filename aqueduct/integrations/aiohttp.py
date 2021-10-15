@@ -9,26 +9,28 @@ from aiohttp import web
 
 AQUEDUCT_FLOW_NAMES = 'aqueduct_flow_names'
 FLOW_NAME = 'flow'
+FLOWS_OBSERVER = 'aqueduct_flows_observer'
 
 
-async def check_flow_state(app: web.Application, check_interval: float = 1.):
-    """Monitors Flow states and shuts down the app if Flow is not running."""
+async def observe_flows(app: web.Application, check_interval: float = 1.):
     flows = {name: app[name] for name in app[AQUEDUCT_FLOW_NAMES]}
     while True:
         for flow_name, flow in flows.items():
             if not flow.is_running:
                 log.info(f'Flow {flow_name} is not running, application will be stopped')
-                await app.shutdown()
-                await app.cleanup()
                 sys.exit(1)
         await asyncio.sleep(check_interval)
 
 
-async def observe_flow(app):
-    asyncio.ensure_future(check_flow_state(app))
+async def run_flows_observer(app):
+    app[FLOWS_OBSERVER] = asyncio.create_task(observe_flows(app))
 
 
-async def stop_flow(app):
+async def stop_flows_observer(app):
+    app[FLOWS_OBSERVER].cancel()
+
+
+async def stop_flows(app):
     flows = [app[name] for name in app[AQUEDUCT_FLOW_NAMES]]
     for flow in flows:  # type: Flow
         await flow.stop()
@@ -36,13 +38,15 @@ async def stop_flow(app):
 
 class AppIntegrator:
     """Adds to app flows and actions to manage flows and app itself."""
-    def __init__(self, app: web.Application):
+    def __init__(self, app: web.Application, exit_on_fail: bool = True):
         if AQUEDUCT_FLOW_NAMES in app:
             raise RuntimeError('AppIntegrator can be created only once. Reuse existing AppIntegrator.')
         self._app = app
         self._app[AQUEDUCT_FLOW_NAMES] = []
-        self._app.on_startup.append(observe_flow)
-        self._app.on_shutdown.append(stop_flow)
+        if exit_on_fail:
+            self._app.on_startup.append(run_flows_observer)
+            self._app.on_shutdown.append(stop_flows_observer)
+        self._app.on_shutdown.append(stop_flows)
 
     def add_flow(self, flow: Flow, flow_name: str = FLOW_NAME, with_start: bool = True):
         if flow_name in self._app:
