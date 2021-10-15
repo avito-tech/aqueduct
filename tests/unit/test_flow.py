@@ -143,7 +143,7 @@ class SlowStartingHandler(BaseTaskHandler):
 
 
 class TestFlow:
-    async def test_run_waiting_for_subproccess_to_start(self, task: Task):
+    async def test_start_waiting_for_subproccess_to_start(self, task: Task):
         """flow.start() should block until all subprocesses fully initialized."""
         handler = SlowStartingHandler()
         handler.start_time = 1
@@ -157,7 +157,7 @@ class TestFlow:
 
         assert t1 - t0 == pytest.approx(slowest_handler.start_time, 0.5)
 
-    async def test_run_waiting_timeout(self, task: Task):
+    async def test_start_waiting_timeout(self, task: Task):
         """flow.start(timeout) should raise FlowError when starting_timeout expired."""
         handler = SlowStartingHandler()
         handler.start_time = 10
