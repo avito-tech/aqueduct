@@ -154,7 +154,7 @@ class TestToAvioMetricsExporter:
 
         metrics = dummy_metrics_exporter.target
         t1, t2, t3 = (seconds for name, seconds in metrics.batch_times.items)
-        assert t1 < 0.01 and t2 < 0.01 and t3 >= 0.05
+        assert t1 == pytest.approx(0.01, 1) and t2 == pytest.approx(0.01, 1) and t3 >= 0.05
         s1, s2, s3 = (sizes for name, sizes in metrics.batch_sizes.items)
         assert s1 == s2 == 4 and s3 == 2
 
