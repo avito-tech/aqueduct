@@ -219,7 +219,7 @@ class Flow:
             log.info('Waiting for all workers to startup...')
             start_barrier.wait(timeout)
         except BrokenBarrierError:
-            raise FlowError('Starting timeout expired')
+            raise TimeoutError('Starting timeout expired')
 
     def _run_tasks(self):
         self._tasks.append(asyncio.ensure_future(self._fetch_processed()))
