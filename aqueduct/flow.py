@@ -6,7 +6,10 @@ import signal
 import sys
 from enum import Enum
 from functools import cached_property
-from typing import Callable, Dict, List, Union
+from functools import reduce
+from multiprocessing import Barrier
+from threading import BrokenBarrierError
+from typing import Callable, Dict, List, Optional, Union
 
 from multiprocessing.resource_tracker import _resource_tracker  # noqa
 
@@ -96,9 +99,14 @@ class Flow:
     def is_running(self) -> bool:
         return self._state == FlowState.RUNNING
 
-    def start(self):
+    def start(self, timeout: Optional[int] = None):
+        """
+        Starts Flow and waits for all subprocesses to initialize.
+
+        raising FlowError if 'timeout' is set and some handler was not able to initialize in time.
+        """
         log.info('Flow is starting')
-        self._run_steps()
+        self._run_steps(timeout)
         self._run_tasks()
         self._state = FlowState.RUNNING
         log.info('Flow was started')
@@ -179,8 +187,14 @@ class Flow:
     def need_collect_task_timers(self) -> bool:
         return self._metrics_manager.collector.is_collectible(MetricsTypes.TASK_TIMERS)
 
-    def _run_steps(self):
+    def _run_steps(self, timeout: Optional[int]):
         self._queues.append(mp.Queue(self._queue_size))
+
+        total_procs = reduce(lambda a, b: a + b.nprocs, self._steps, 0)
+        # also count main process
+        total_procs += 1
+        start_barrier = Barrier(total_procs)
+
         for step_number, step in enumerate(self._steps, 1):
             self._queues.append(mp.Queue(self._queue_size))
             worker_curr = Worker(
@@ -196,9 +210,16 @@ class Flow:
             self._contexts[step.handler] = start_processes(
                 worker_curr.loop,
                 nprocs=step.nprocs, join=False, daemon=True, start_method='fork',
+                args=(start_barrier,),
             )
             log.info(f'Created step {step.handler}, '
                      f'queue_in: {self._queues[-2]}, queue_out:{self._queues[-1]}')
+
+        try:
+            log.info('Waiting for all workers to startup...')
+            start_barrier.wait(timeout)
+        except BrokenBarrierError:
+            raise TimeoutError('Starting timeout expired')
 
     def _run_tasks(self):
         self._tasks.append(asyncio.ensure_future(self._fetch_processed()))
