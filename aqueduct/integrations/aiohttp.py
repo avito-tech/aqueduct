@@ -12,34 +12,30 @@ FLOW_NAME = 'flow'
 FLOW_OBSERVER_NAME = 'aqueduct_flow_observer'
 
 
-async def flow_observer(app: web.Application, check_interval: float = 1.):
+async def observe_flows(app: web.Application, check_interval: float = 1.):
     """Monitors all Flows states and shuts down the app if some Flow is not running.
 
     Cancel this task to properly shut down all Flows."""
     flows = {name: app[name] for name in app[AQUEDUCT_FLOW_NAMES]}
 
-    # There is a specific 'protocol' for managing background task lifetime.
-    # Docs: https://docs.aiohttp.org/en/stable/web_advanced.html#background-tasks
-    try:
-        while True:
-            for flow_name, flow in flows.items():
-                if not flow.is_running:
-                    log.info(f'Flow {flow_name} is not running, application will be stopped')
-                    sys.exit(1)
-            await asyncio.sleep(check_interval)
-    except asyncio.CancelledError:
-        pass
-    finally:
-        for flow in flows.values():
-            await flow.stop()
+    while True:
+        for flow_name, flow in flows.items():
+            if not flow.is_running:
+                log.info(f'Flow {flow_name} is not running, application will be stopped')
+                sys.exit(1)
+        await asyncio.sleep(check_interval)
 
 
-async def observe_all_flows(app):
-    app[FLOW_OBSERVER_NAME] = asyncio.create_task(flow_observer(app))
+async def start_observing_all_flows(app):
+    app[FLOW_OBSERVER_NAME] = asyncio.create_task(observe_flows(app))
 
 
 async def stop_all_flows(app):
     app[FLOW_OBSERVER_NAME].cancel()
+
+    flows = {name: app[name] for name in app[AQUEDUCT_FLOW_NAMES]}
+    for flow in flows.values():
+        await flow.stop()
 
 
 class AppIntegrator:
@@ -49,7 +45,7 @@ class AppIntegrator:
             raise RuntimeError('AppIntegrator can be created only once. Reuse existing AppIntegrator.')
         self._app = app
         self._app[AQUEDUCT_FLOW_NAMES] = []
-        self._app.on_startup.append(observe_all_flows)
+        self._app.on_startup.append(start_observing_all_flows)
         self._app.on_shutdown.append(stop_all_flows)
 
     def add_flow(self, flow: Flow, flow_name: str = FLOW_NAME, with_start: bool = True):
