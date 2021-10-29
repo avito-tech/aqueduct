@@ -17,6 +17,7 @@ from aqueduct.flow import (
 )
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.metrics import MAIN_PROCESS
+from aqueduct.shm import _shm_ref_counter
 from aqueduct.task import BaseTask
 from tests.unit.conftest import (
     Task,
@@ -300,3 +301,32 @@ async def test_segfault_due_to_share_field_in_handler(array, flow_for_shared_arr
     t = BaseTask()
     await flow_for_shared_array.process(t)
     assert t.array[0] == array[-1]  # noqa
+
+
+async def test_right_ref_count_for_parallel_tasks(array_sh_data, simple_flow):
+    assert array_sh_data.shm_wrapper.ref_count == 1
+
+    tasks = [BaseTask() for _ in range(50)]
+    for t in tasks:
+        t.sh_array = array_sh_data
+    await asyncio.gather(*[simple_flow.process(t) for t in tasks])
+
+    # to run gc
+    tasks = [BaseTask() for _ in range(len(tasks))]
+    await asyncio.gather(*[simple_flow.process(t) for t in tasks])
+
+    assert array_sh_data.shm_wrapper.ref_count == 1
+
+
+async def test_right_ref_count_for_seq_tasks(simple_flow, array):
+    start_shm_count = len(_shm_ref_counter._counter)
+
+    for _ in range(50):
+        task = ArrayFieldTask(array)
+        task.share_value('array')
+        await simple_flow.process(task)
+
+    task = BaseTask()
+    await simple_flow.process(task)
+
+    assert len(_shm_ref_counter._counter) == start_shm_count

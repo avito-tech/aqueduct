@@ -1,12 +1,14 @@
-from multiprocessing import Process, Queue
-from unittest.mock import patch
+from multiprocessing import (
+    Process,
+    Queue,
+)
 
 import numpy as np
 import pytest
 
 from aqueduct.shm import (
     NPArraySharedData,
-    SharedMemoryWrapper,
+    _shm_ref_counter,
 )
 from tests.unit.conftest import Task
 
@@ -28,18 +30,6 @@ def update_sh_array(q_in: Queue, q_out: Queue):
     # сама проверка делается в родительском процессе, потому что исключение из дочернего не прокидывается
     # в родительский процесс автоматически
     q_out.put((sh_array[0] == new_value, f'array elem {sh_array[0]} is not equal to value {new_value}'))
-
-
-def update_ref_counter(q_in: Queue, q_out: Queue):
-    array_sh_data, value = q_in.get()
-    shm_wrapper: SharedMemoryWrapper = array_sh_data.shm_wrapper
-    ref_counter = shm_wrapper._ref_counter  # noqa
-    ref_counter[0] = value
-    q_out.put((None, None))
-    # дожидаемся изменения ref_counter в главном процессе
-    _, new_value = q_in.get()
-    # теперь ref_counter равен new_value
-    q_out.put((ref_counter[0] == new_value, f'ref_count {ref_counter[0]} is not equal to value {new_value}'))
 
 
 def update_task_field(q_in: Queue, q_out: Queue):
@@ -96,27 +86,6 @@ class TestNPArraySharedData:
         assert sh_array[0] == value
         value += 1
         sh_array[0] = value
-        q_out.put((None, value))
-        assert_expr, msg = q_in.get()
-        assert assert_expr, msg
-
-        p.join()
-
-    def test_access_to_ref_counter(self, array_sh_data: NPArraySharedData):
-        ref_counter = array_sh_data.shm_wrapper._ref_counter
-
-        q_in, q_out = Queue(), Queue()
-        p = Process(target=update_ref_counter, args=(q_out, q_in))
-        p.start()
-
-        value = 4
-        q_out.put((array_sh_data, value))
-        # дожидаемся изменения массива в дочернем процессе
-        _, _ = q_in.get()
-        # теперь ref_counter равен value
-        assert ref_counter[0] == value
-        value = 2
-        ref_counter[0] = value
         q_out.put((None, value))
         assert_expr, msg = q_in.get()
         assert assert_expr, msg
@@ -184,9 +153,8 @@ class TestSharedFieldsMixin:
     def test_auto_change_ref_counter(self, task: ArrayFieldTask):
         task.share_value('array')
         shf_info = task._shared_fields['array']
-        ref_counter = shf_info.shm_wrapper._ref_counter
         # при присоединении памяти был увеличен счетчик ссылок
-        assert ref_counter[0] == 1
+        assert shf_info.shm_wrapper.ref_count == 1
 
         q_in, q_out = Queue(), Queue()
         p = Process(target=handle_task, args=(q_out, q_in))
@@ -195,21 +163,19 @@ class TestSharedFieldsMixin:
         q_out.put(task)
         q_in.get()
         # после присоединения области памяти дочерним процессом был увеличен счетчик ссылок
-        assert ref_counter[0] == 2
+        assert shf_info.shm_wrapper.ref_count == 2
 
         q_out.put(None)
         q_in.get()
         # после работы gc в дочернем процессе счетчик ссылок был уменьшен
-        assert ref_counter[0] == 1
+        assert shf_info.shm_wrapper.ref_count == 1
 
         q_out.put(None)
         p.join()
 
-        task.array = None
-        with patch.object(shf_info.shm_wrapper.shm, 'unlink') as mocked:
-            shf_info, ref_counter = None, None
-            # после того, как не остается ссылок на разделяемую память, она освобождается
-            assert mocked.called is True
+        name = shf_info.shm_wrapper.shm.name
+        task.array, shf_info = None, None
+        assert _shm_ref_counter.get_count(name) is None
 
     def test_save_shared_value_directly(self, task: ArrayFieldTask):
         # НЕ рекомендуемый способ расшарить значение поля, но так тоже можно
@@ -218,4 +184,4 @@ class TestSharedFieldsMixin:
         shared_array = NPArraySharedData.create_from_data(task.array)
         task.array = shared_array
         assert field_name in task._shared_fields
-        assert task._shared_fields[field_name].shm_wrapper._ref_counter[0] == 1
+        assert task._shared_fields[field_name].shm_wrapper.ref_count == 1

@@ -23,9 +23,6 @@ from aqueduct.task import BaseTask
 
 pytest_plugins = 'aiohttp.pytest_plugin'
 
-# необходимо для корректной работы тестов на MacOS
-mp.set_start_method('fork')
-
 
 class SharedCounter:
     """ A synchronized shared counter.

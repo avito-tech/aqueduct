@@ -12,38 +12,78 @@ unregister(f'/{shm.name}', 'shared_memory')
 Также этой проблемы нет, если процесс, использующий память, дочерний (т.к. там тот же самый трекер ресурсов)
 https://bugs.python.org/issue39959
 """
+import contextlib
 import multiprocessing as mp
 import warnings
 from abc import ABC, abstractmethod
+
 try:
     from multiprocessing import shared_memory
 except ImportError as e:
     raise ImportError('shared_memory module is available since python3.8')
-from typing import Any, Dict, Tuple
+from typing import (
+    Any,
+    Dict,
+    Optional,
+    Tuple,
+)
 
 import numpy as np
 
-from .exceptions import BadReferenceCount
+
+class _ShmRefCounter:
+    """Calculates the number of references to shared memory."""
+    def __init__(self):
+        self._counter = mp.Manager().dict()
+        self._lock = mp.RLock()
+
+    def get_count(self, shm_name: str) -> Optional[int]:
+        return self._counter.get(shm_name)
+
+    def on_create(self, shm_name: str):
+        self._lock.acquire()
+        if shm_name in self._counter:
+            self._counter[shm_name] += 1
+        else:
+            self._counter[shm_name] = 1
+        self._lock.release()
+
+    def on_delete(self, shm_name: str):
+        self._lock.acquire()
+        self._counter[shm_name] -= 1
+        if self.get_count(shm_name) == 0:
+            self._counter.pop(shm_name)
+        self._lock.release()
+
+    def on_send(self, shm_name: str):
+        self._lock.acquire()
+        self._counter[shm_name] += 1
+        self._lock.release()
+
+    @contextlib.contextmanager
+    def on_receive(self, shm_name: str):
+        self._lock.acquire()
+        yield
+        self._counter[shm_name] -= 1
+        self._lock.release()
+
+
+_shm_ref_counter = _ShmRefCounter()
 
 
 class SharedMemoryWrapper:
-    """Управляет разделяемой памятью.
+    """Manages the shared memory lifecycle.
 
-    Предоставляет память нужного размера, следит за количеством ссылок на память, при отсутствии
-    ссылок на память возвращает память ОС.
+    Allocates shared memory, manages reference counts and returns shared memory to OS.
     """
     def __init__(self, size: int, shm: shared_memory.SharedMemory = None, shm_name: str = None):
-        # поле _size нужно, чтобы найти в разделяемой памяти ref_counter
-        self._size = size
         self._shm: shared_memory.SharedMemory = None  # noqa
-        self._ref_counter: np.ndarray = None  # noqa
 
         if shm is None and shm_name is None:
-            # 4 байта на счетчик ссылок (int32)
-            shm = shared_memory.SharedMemory(create=True, size=self._size + 4)
+            shm = shared_memory.SharedMemory(create=True, size=size)
         self._attach_shm(shm, shm_name)
 
-        # поле _shm_name нужно для десериализации
+        # it's necessary for deserialization
         self._shm_name = self._shm.name
 
     @property
@@ -52,56 +92,29 @@ class SharedMemoryWrapper:
 
     @property
     def ref_count(self) -> int:
-        return self._ref_counter[0]
+        return _shm_ref_counter.get_count(self._shm_name)
 
     def _attach_shm(self, shm: shared_memory.SharedMemory = None, shm_name: str = None):
         if shm is None:
             shm = shared_memory.SharedMemory(shm_name)
         self._shm = shm
-        self._ref_counter = self._get_ref_counter()
-        # нужно только для процесса, выделившего разделяемую память
-        if self.ref_count == 0:
-            self._update_ref_counter()
-
-    def _update_ref_counter(self, incr: bool = True):
-        """Обновляет количество ссылок на используемую область разделяемой памяти."""
-        if incr:
-            self._ref_counter[0] += 1
-        else:
-            if self._ref_counter[0] == 0:
-                raise BadReferenceCount('Reference count should not be less than 0')
-            self._ref_counter[0] -= 1
-
-    def _get_ref_counter(self) -> np.ndarray:
-        # todo попробовать сделать ссылку на целое число, а не np.array
-        return np.frombuffer(self._shm.buf, dtype=np.int32, offset=self._size, count=1)
-
-    def _release_shm(self):
-        # if shm is already closed (for example manually). Unexpected behavior
-        if self._shm.buf is None:
-            # todo log as warning? ref_counter would be wrong -> memory leak
-            return
-
-        self._update_ref_counter(False)
-        ref_count = self._ref_counter[0]
-        self._shm.close()
-        if ref_count == 0:
-            self._shm.unlink()
+        self._shm_name = shm.name
+        _shm_ref_counter.on_create(self._shm_name)
 
     def __getstate__(self) -> dict:
-        # счетчик ссылок увеличивается здесь, т.к. если объект пересылается долго (долго находится в очереди),
-        # gc удаляет объект и память возвращается ОС до того, как объект будет вычитан из очереди
-        # из-за этого при вычитывании объекта и попытке присоединить разделяемую память возникает ошибка
-        self._update_ref_counter()
-        state = {k: v for k, v in self.__dict__.items() if k not in ('_shm', '_ref_counter')}
+        _shm_ref_counter.on_send(self._shm_name)
+        state = {k: v for k, v in self.__dict__.items() if k != '_shm'}
         return state
 
     def __setstate__(self, state: dict):
         self.__dict__.update(state)
-        self._attach_shm(shm_name=self._shm_name)
+        with _shm_ref_counter.on_receive(self._shm_name):
+            self._attach_shm(shm_name=self._shm_name)
 
     def __del__(self):
-        self._release_shm()
+        _shm_ref_counter.on_delete(self._shm_name)
+        if _shm_ref_counter.get_count(self._shm_name) == 0:
+            self._shm.unlink()
 
 
 class SharedData(ABC):
