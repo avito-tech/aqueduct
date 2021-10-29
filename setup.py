@@ -36,4 +36,6 @@ setup(
         'Operating System :: Unix',
         'Operating System :: OS Independent',
     ],
+    setup_requires=['cffi'],
+    install_requires=['cffi'],
 )
