@@ -9,39 +9,6 @@ from .metrics.timer import timeit
 from .task import BaseTask, StopTask
 
 
-def batches(
-        elements: Iterable,
-        batch_size: int,
-        timeout: float,
-) -> Iterator[List]:
-    batch = []
-    timeout_end = time.monotonic() + timeout
-
-    for elem in elements:
-        if elem:
-            batch.append(elem)
-        if time.monotonic() >= timeout_end or len(batch) == batch_size:
-            if batch:
-                yield batch
-                batch = []
-            timeout_end = time.monotonic() + timeout
-
-    if batch:
-        yield batch
-
-
-def batches_with_lock(batches_gen: Iterator[List], lock: mp.Lock) -> Iterator[List]:
-    while True:
-        lock.acquire()
-        try:
-            batch = next(batches_gen)
-        except StopIteration:
-            return
-        finally:
-            lock.release()
-        yield batch
-
-
 class Worker:
     """Обертка над классом BaseTaskHandler.
 
@@ -75,56 +42,90 @@ class Worker:
         """Runs something huge (e.g. model) in child process."""
         self.task_handler.on_start()
 
-    def _tasks(self) -> Iterator[Optional[BaseTask]]:
-        """Provides suitable for processing tasks."""
+    def _wait_task(self, timeout: float) -> Optional[BaseTask]:
+        try:
+            task: BaseTask = self.queue_in.get(timeout=timeout)
+        except queue.Empty:
+            return
+
+        if isinstance(task, StopTask):
+            self._stop_task = task
+            return
+
+        log.debug(f'[{self.name}] Have message')
+        task.metrics.stop_transfer_timer(self.step_name)
+
+        # don't pass an expired task to the next steps
+        if task.is_expired():
+            log.debug(f'[{self.name}] Task expired. Skip: {task}')
+            return
+
+        # don't process unsuitable tasks
+        if not self.handle_condition(task):
+            self._post_handle(task)
+            return
+
+        return task
+
+    def _wait_batch(self) -> List[BaseTask]:
+        batch = []
+
+        # wait for the first task
         while True:
-            try:
-                task: BaseTask = self.queue_in.get(block=False)
-            except queue.Empty:
-                # returns control
-                yield
-                time.sleep(0.001)
-                continue
-            if isinstance(task, StopTask):
-                self._stop_task = task
+            task = self._wait_task(10.)
+            if task:
+                batch.append(task)
                 break
-            log.debug(f'[{self.name}] Have message')
-            task.metrics.stop_transfer_timer(self.step_name)
-            # dont't pass an expired task to the next steps
-            if task.is_expired():
-                log.debug(f'[{self.name}] Task expired. Skip: {task}')
-                continue
-            # don't process unsuitable tasks
-            if not self.handle_condition(task):
-                self._post_handle(task)
-                continue
-            yield task
+            elif self._stop_task:
+                return []
 
-    def _tasks_batches(self) -> Iterator[Optional[List[BaseTask]]]:
+        # if batch size is 1, there is no need to wait anymore
         if self._batch_size == 1:
-            # pseudo batching
-            for task in self._tasks():
-                if task:
-                    yield [task]
-        else:
-            tasks_batches: Iterator[List[BaseTask]] = batches(
-                self._tasks(),
-                batch_size=self._batch_size,
-                timeout=self._batch_timeout,
-            )
-            if self._batch_lock:
-                # to take a queue_in lock for the duration of batch filling time
-                tasks_batches = batches_with_lock(tasks_batches, self._batch_lock)
+            return batch
 
-            while True:
-                try:
-                    with timeit() as timer:
-                        tasks_batch = next(tasks_batches)
+        # waiting for the rest of the batch
+        timeout = self._batch_timeout
+        while True:
+            with timeit() as passed_time:
+                task = self._wait_task(timeout)
+
+            if task:
+                batch.append(task)
+
+                if len(batch) == self._batch_size:
+                    return batch
+
+            timeout -= passed_time.seconds
+
+            if self._stop_task or timeout <= 0:
+                return batch
+
+            # timeout should not be less then 1ms, to avoid unnecessary short sleeps
+            timeout = max(timeout, 0.001)
+
+    def _iter_batches(self) -> Iterator[Optional[List[BaseTask]]]:
+        """ Returns iterator over input task batches.
+        If there is no tasks in queue -> block until task appears.
+        This iterator takes into account batch_timeout and batch size.
+        If input task is expired or filtered by condition - it would not be placed in batch.
+        """
+        while True:
+            with timeit() as timer:
+                if self._batch_lock:
+                    # to take a queue_in lock for the duration of batch filling time
+                    with self._batch_lock:
+                        tasks_batch = self._wait_batch()
+                else:
+                    tasks_batch = self._wait_batch()
+
+            if tasks_batch and len(tasks_batch) > 0:
+                if self._batch_size > 1:
                     tasks_batch[0].metrics.batch_times.add(self.step_name, timer.seconds)
                     tasks_batch[0].metrics.batch_sizes.add(self.step_name, len(tasks_batch))
-                except StopIteration:
-                    return
                 yield tasks_batch
+
+            if self._stop_task:
+                break
 
     def _post_handle(self, task: BaseTask):
         task.metrics.start_transfer_timer(self.step_name)
@@ -142,7 +143,7 @@ class Worker:
 
         log.info(f'[Worker] handler {self.name} ok, starting loop')
 
-        for tasks_batch in self._tasks_batches():
+        for tasks_batch in self._iter_batches():
             with timeit() as timer:
                 self.task_handler.handle(*tasks_batch)
 
