@@ -1,3 +1,6 @@
+# 1.8.0
+- fix shared memory reference counting
+
 # 1.7.1
 - fix aiohttp integration (monitoring task is not affecting unit tests now)
 - `Flow.run()` now waiting for all child processes to initialize (all `Handler.on_start()` methods guaranteed to be completed before `run` releases)
