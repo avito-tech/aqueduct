@@ -8,7 +8,7 @@ packages = ['aqueduct']
 setup(
     name='aqueduct',
     packages=find_packages(),
-    version='1.7.1',
+    version='1.8.0',
     license='MIT',
     license_files='LICENSE.txt',
     author='Data Science SWAT',
@@ -36,4 +36,6 @@ setup(
         'Operating System :: Unix',
         'Operating System :: OS Independent',
     ],
+    setup_requires=['cffi==1.15.0'],
+    install_requires=['cffi==1.15.0'],
 )

@@ -12,100 +12,127 @@ unregister(f'/{shm.name}', 'shared_memory')
 Также этой проблемы нет, если процесс, использующий память, дочерний (т.к. там тот же самый трекер ресурсов)
 https://bugs.python.org/issue39959
 """
+import contextlib
+
+from cffi import FFI
+
 import multiprocessing as mp
 import warnings
 from abc import ABC, abstractmethod
+
 try:
     from multiprocessing import shared_memory
 except ImportError as e:
     raise ImportError('shared_memory module is available since python3.8')
-from typing import Any, Dict, Tuple
+from typing import (
+    Any,
+    Dict,
+    Optional,
+    Tuple,
+)
 
 import numpy as np
 
-from .exceptions import BadReferenceCount
+ffi = FFI()
+
+ffi.cdef("""
+uint32_t load_uint32(uint32_t *v);
+void store_uint32(uint32_t *v, uint32_t n);
+uint32_t add_and_fetch_uint32(uint32_t *v, uint32_t i);
+uint32_t sub_and_fetch_uint32(uint32_t *v, uint32_t i);
+""")
+
+atomic = ffi.verify("""
+uint32_t load_uint32(uint32_t *v) {
+    return __atomic_load_n(v, __ATOMIC_SEQ_CST);
+};
+void store_uint32(uint32_t *v, uint32_t n) {
+    uint32_t i = n;
+    __atomic_store(v, &i, __ATOMIC_SEQ_CST);
+};
+uint32_t add_and_fetch_uint32(uint32_t *v, uint32_t i) {
+    return __atomic_add_fetch(v, i, __ATOMIC_SEQ_CST);
+};
+uint32_t sub_and_fetch_uint32(uint32_t *v, uint32_t i) {
+    return __atomic_sub_fetch(v, i, __ATOMIC_SEQ_CST);
+};
+""")
+
+
+class AtomicCounter:
+    def __init__(self, view: memoryview):
+        self._ptr = ffi.cast('uint32_t*', ffi.from_buffer(view[:self.size()]))
+
+    def get(self):
+        return atomic.load_uint32(self._ptr)
+
+    def set(self, n):
+        return atomic.store_uint32(self._ptr, n)
+
+    def inc(self):
+        return atomic.add_and_fetch_uint32(self._ptr, 1)
+
+    def dec(self):
+        return atomic.sub_and_fetch_uint32(self._ptr, 1)
+
+    @staticmethod
+    def size():
+        return ffi.sizeof('uint32_t')
 
 
 class SharedMemoryWrapper:
-    """Управляет разделяемой памятью.
+    """Manages the shared memory lifecycle.
 
-    Предоставляет память нужного размера, следит за количеством ссылок на память, при отсутствии
-    ссылок на память возвращает память ОС.
+    Allocates shared memory, manages reference counts and returns shared memory to OS.
     """
+
     def __init__(self, size: int, shm: shared_memory.SharedMemory = None, shm_name: str = None):
-        # поле _size нужно, чтобы найти в разделяемой памяти ref_counter
-        self._size = size
         self._shm: shared_memory.SharedMemory = None  # noqa
-        self._ref_counter: np.ndarray = None  # noqa
 
         if shm is None and shm_name is None:
-            # 4 байта на счетчик ссылок (int32)
-            shm = shared_memory.SharedMemory(create=True, size=self._size + 4)
+            rc_size = AtomicCounter.size()
+            shm = shared_memory.SharedMemory(create=True, size=size + rc_size)
+            self._rc = AtomicCounter(shm.buf)
+            self._rc.set(1)
+
         self._attach_shm(shm, shm_name)
 
-        # поле _shm_name нужно для десериализации
+        # it's necessary for deserialization
         self._shm_name = self._shm.name
 
     @property
-    def shm(self) -> shared_memory.SharedMemory:
-        return self._shm
+    def buf(self) -> memoryview:
+        return self._shm.buf[AtomicCounter.size():]
 
     @property
     def ref_count(self) -> int:
-        return self._ref_counter[0]
+        return self._rc.get()
 
     def _attach_shm(self, shm: shared_memory.SharedMemory = None, shm_name: str = None):
         if shm is None:
             shm = shared_memory.SharedMemory(shm_name)
         self._shm = shm
-        self._ref_counter = self._get_ref_counter()
-        # нужно только для процесса, выделившего разделяемую память
-        if self.ref_count == 0:
-            self._update_ref_counter()
-
-    def _update_ref_counter(self, incr: bool = True):
-        """Обновляет количество ссылок на используемую область разделяемой памяти."""
-        if incr:
-            self._ref_counter[0] += 1
-        else:
-            if self._ref_counter[0] == 0:
-                raise BadReferenceCount('Reference count should not be less than 0')
-            self._ref_counter[0] -= 1
-
-    def _get_ref_counter(self) -> np.ndarray:
-        # todo попробовать сделать ссылку на целое число, а не np.array
-        return np.frombuffer(self._shm.buf, dtype=np.int32, offset=self._size, count=1)
-
-    def _release_shm(self):
-        # if shm is already closed (for example manually). Unexpected behavior
-        if self._shm.buf is None:
-            # todo log as warning? ref_counter would be wrong -> memory leak
-            return
-
-        self._update_ref_counter(False)
-        ref_count = self._ref_counter[0]
-        self._shm.close()
-        if ref_count == 0:
-            self._shm.unlink()
+        self._shm_name = shm.name
 
     def __getstate__(self) -> dict:
-        # счетчик ссылок увеличивается здесь, т.к. если объект пересылается долго (долго находится в очереди),
-        # gc удаляет объект и память возвращается ОС до того, как объект будет вычитан из очереди
-        # из-за этого при вычитывании объекта и попытке присоединить разделяемую память возникает ошибка
-        self._update_ref_counter()
-        state = {k: v for k, v in self.__dict__.items() if k not in ('_shm', '_ref_counter')}
+        self._rc.inc()
+        state = {k: v for k, v in self.__dict__.items() if k not in ('_shm', '_rc')}
         return state
 
     def __setstate__(self, state: dict):
         self.__dict__.update(state)
         self._attach_shm(shm_name=self._shm_name)
+        self._rc = AtomicCounter(self._shm.buf)
 
     def __del__(self):
-        self._release_shm()
+        curr_rc = self._rc.dec()
+        if curr_rc == 0:
+            self._shm.unlink()
 
 
 class SharedData(ABC):
     """Управляет данными в разделяемой памяти."""
+
     def __init__(self, shm_wrapper: SharedMemoryWrapper):
         self.shm_wrapper = shm_wrapper
 
@@ -126,9 +153,9 @@ class NPArraySharedData(SharedData):
         super().__init__(shm_wrapper)
 
     def get_data(self) -> np.ndarray:
-        if self.shm_wrapper.shm.buf is None:
+        if self.shm_wrapper.buf is None:
             raise ValueError('No shared memory buffer')
-        return np.ndarray(self._shape, dtype=self._dtype, buffer=self.shm_wrapper.shm.buf)
+        return np.ndarray(self._shape, dtype=self._dtype, buffer=self.shm_wrapper.buf)
 
     @classmethod
     def create_from_data(cls, data: np.ndarray) -> 'NPArraySharedData':
@@ -141,6 +168,7 @@ class NPArraySharedData(SharedData):
 
 class SharedFieldsMixin:
     """Позволяет заменить значение поля экземпляра класса на его копию в разделяемой памяти."""
+
     def __init__(self, *args, **kwargs):
         self._shared_fields: Dict[str, SharedData] = {}
         super().__init__(*args, **kwargs)

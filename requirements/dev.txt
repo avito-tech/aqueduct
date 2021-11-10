@@ -1,2 +1,3 @@
 numpy
 aiohttp
+cffi==1.15.0
