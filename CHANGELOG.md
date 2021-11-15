@@ -1,3 +1,6 @@
+# 1.8.1
+- fix multiprocessing start method setting, imports order
+
 # 1.8.0
 - fix shared memory reference counting
 
