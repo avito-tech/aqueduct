@@ -12,13 +12,14 @@ unregister(f'/{shm.name}', 'shared_memory')
 Также этой проблемы нет, если процесс, использующий память, дочерний (т.к. там тот же самый трекер ресурсов)
 https://bugs.python.org/issue39959
 """
-import contextlib
+
+import warnings
+from abc import (
+    ABC,
+    abstractmethod,
+)
 
 from cffi import FFI
-
-import multiprocessing as mp
-import warnings
-from abc import ABC, abstractmethod
 
 try:
     from multiprocessing import shared_memory
@@ -27,7 +28,6 @@ except ImportError as e:
 from typing import (
     Any,
     Dict,
-    Optional,
     Tuple,
 )
 
