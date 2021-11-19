@@ -11,6 +11,7 @@ from multiprocessing import Barrier
 from threading import BrokenBarrierError
 from typing import Callable, Dict, List, Optional, Union
 
+from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.resource_tracker import _resource_tracker  # noqa
 
 from .exceptions import FlowError, NotRunningError
@@ -232,6 +233,7 @@ class Flow:
 
         The queue name consists of two handler names that are connected by this queue.
         """
+
         def step_names(handlers):
             from_step = MAIN_PROCESS
             for step_number, handler in enumerate(handlers, 1):
@@ -243,17 +245,38 @@ class Flow:
         return {queue_: f'from_{from_}_to_{to}'
                 for queue_, (from_, to) in zip(self._queues, step_names(self._contexts))}
 
+    @staticmethod
+    def _fetch_from_queue(out_queue: mp.Queue) -> Union[BaseTask, None]:
+        try:
+            task = out_queue.get(timeout=1.)
+            return task
+        except queue.Empty:
+            return None
+
     async def _fetch_processed(self):
-        while True:
-            try:
-                task: BaseTask = self._queues[-1].get(block=False)
+        """ Fetching messages from output queue.
+
+        To handle messages from another process and not block asyncio loop, we run queue.get()
+        in a separate thread
+
+        """
+        loop = asyncio.get_event_loop()
+
+        with ThreadPoolExecutor(max_workers=1) as queue_fetch_executor:
+            while True:
+                task = await loop.run_in_executor(
+                    queue_fetch_executor,
+                    self._fetch_from_queue,
+                    self._queues[-1]
+                )
+                if not task:
+                    continue
+
                 task.metrics.stop_transfer_timer(MAIN_PROCESS)
-            except queue.Empty:
-                await asyncio.sleep(0.001)
-                continue
-            if task.task_id in self._task_futures:
-                future = self._task_futures[task.task_id]
-                if not future.cancelled() and not future.done():
+
+                future = self._task_futures.get(task.task_id)
+
+                if future and not future.cancelled() and not future.done():
                     future.set_result(task)
 
     async def _check_is_alive(self, sleep_sec: float = 1.):

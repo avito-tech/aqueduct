@@ -43,7 +43,7 @@ class CatDetector:
     """GPU model emulator that predicts the presence of the cat in the image."""
     IMAGE_PROCESS_TIME = 0.01
     BATCH_REDUCTION_FACTOR = 0.7
-    OVERHEAD_TIME = 0.02
+    OVERHEAD_TIME = 0.025
     BATCH_PROCESS_TIME = IMAGE_PROCESS_TIME * TASKS_BATCH_SIZE * BATCH_REDUCTION_FACTOR + OVERHEAD_TIME
 
     def predict(self, images: np.array) -> np.array:

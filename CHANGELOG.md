@@ -1,3 +1,6 @@
+# 1.9.0
+- fix CPU consumption in subprocesses
+
 # 1.8.1
 - fix multiprocessing start method setting, imports order
 
