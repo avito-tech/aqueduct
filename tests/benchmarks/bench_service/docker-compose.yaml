@@ -28,6 +28,9 @@ services:
         command: python -m maas.maas.app
     maas-bench:
         runtime: nvidia
+        build:
+          context: .
+          dockerfile: Dockerfile
         image: maas-$USER
         container_name: maas_bench_$USER
         environment:
