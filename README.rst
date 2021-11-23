@@ -84,7 +84,10 @@ Simple example how to start with aqueduct using aiohttp. For better examples see
 Batching
 ========
 
-Aqueduct supports the ability to process tasks with batches. Default batch size is one.
+Aqueduct supports the ability to process tasks with batches.
+To use batching you simply should specify `batch_size` parameter that indicates, how many tasks could be in a batch.
+You can determine correct `batch_size` for your handler by manually measuring handler performance
+for different batch sizes.
 
 .. code-block:: python
 
@@ -163,11 +166,9 @@ Aqueduct supports the ability to process tasks with batches. Default batch size 
 
 	await flow_with_batch_handler.stop()
 
-	# if we have batch size more than tasks number, we can limit batch accumulation time
-	# with timeout parameter for processing time optimization
 	tasks_batch = get_tasks_batch()
 	flow_with_batch_handler = Flow(
-		FlowStep(CatDetectorHandler(), batch_size=2*TASKS_BATCH_SIZE, batch_timeout=0.01)
+		FlowStep(CatDetectorHandler(), batch_size=2*TASKS_BATCH_SIZE)
 	)
 	flow_with_batch_handler.start()
 
@@ -178,6 +179,14 @@ Aqueduct supports the ability to process tasks with batches. Default batch size 
 
 	await flow_with_batch_handler.stop()
 
+
+Aqueduct (by default) does not guaranty that handler would always be getting exact batch size.
+It may be less than `batch_size`, but newer greater.
+That is because we are not waiting for batch to be fully collected.
+This allows as to avoid overhead for low load scenarios, and on the other hand,
+if input requests would be frequent enough, real batch would always be equal `batch_size`.
+If you find that your handler performs better with specific, exact batch size,
+you can use additional `batch_timeout` parameter to specify time to wait for full batch to be collected.
 
 Sentry
 ======

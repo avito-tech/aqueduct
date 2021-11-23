@@ -1,3 +1,7 @@
+# 1.10.0
+- added dynamic batching strategy (used if batch_timeout = 0)
+- added `pulemet` as external dependency
+
 # 1.9.0
 - fix CPU consumption in subprocesses
 

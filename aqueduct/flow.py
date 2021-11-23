@@ -49,7 +49,7 @@ class FlowStep:
             handle_condition: Callable[[BaseTask], bool] = lambda x: True,
             nprocs: int = 1,
             batch_size: int = 1,
-            batch_timeout: float = 0.5,
+            batch_timeout: float = 0,
     ):
         _check_env()
         self.handler = handler
@@ -73,7 +73,7 @@ class Flow:
             metrics_enabled: bool = True,
             metrics_collector: Collector = None,
             metrics_exporter: Exporter = None,
-            queue_size: int = 20,
+            queue_size: Optional[int] = None,
     ):
         _check_env()
 
@@ -82,7 +82,7 @@ class Flow:
         self._contexts: Dict[BaseTaskHandler, ProcessContext] = {}
         self._queues: List[mp.Queue] = []
         self._task_futures: Dict[str, asyncio.Future] = {}
-        self._queue_size: int = queue_size
+        self._queue_size: Optional[int] = queue_size
 
         if not metrics_enabled:
             log.warn('Metrics collecting is disabled')
@@ -188,16 +188,33 @@ class Flow:
     def need_collect_task_timers(self) -> bool:
         return self._metrics_manager.collector.is_collectible(MetricsTypes.TASK_TIMERS)
 
-    def _run_steps(self, timeout: Optional[int]):
-        self._queues.append(mp.Queue(self._queue_size))
+    def _calc_queue_size(self, step: FlowStep):
+        """ If queue size not specified manually, get queue size based on batch size for handler.
+        We need at least batch_size places in queue and then some additional space
+        """
+        if self._queue_size:
+            return self._queue_size
 
+        # queue should be able to store at least 20 task, that's seems reasonable
+        return max(step.batch_size*3, 20)
+
+    def _run_steps(self, timeout: Optional[int]):
+        if len(self._steps) == 0:
+            log.info('Flow has zero steps -> do nothing')
+            return
+
+        # count how many processes we will create, to setup a barrier
         total_procs = reduce(lambda a, b: a + b.nprocs, self._steps, 0)
         # also count main process
         total_procs += 1
         start_barrier = Barrier(total_procs)
 
+        queue_size = self._calc_queue_size(self._steps[0])
+        self._queues.append(mp.Queue(queue_size))
+
         for step_number, step in enumerate(self._steps, 1):
-            self._queues.append(mp.Queue(self._queue_size))
+            queue_size = self._calc_queue_size(step)
+            self._queues.append(mp.Queue(queue_size))
             worker_curr = Worker(
                 self._queues[-2],
                 self._queues[-1],

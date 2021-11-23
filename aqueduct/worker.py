@@ -1,7 +1,6 @@
 import multiprocessing as mp
 import queue
-import time
-from typing import Callable, Iterable, Iterator, List, Optional
+from typing import Callable, Iterator, List, Optional
 
 from .handler import BaseTaskHandler
 from .logger import log
@@ -44,7 +43,10 @@ class Worker:
 
     def _wait_task(self, timeout: float) -> Optional[BaseTask]:
         try:
-            task: BaseTask = self.queue_in.get(timeout=timeout)
+            if timeout == 0:
+                task: BaseTask = self.queue_in.get(block=False)
+            else:
+                task: BaseTask = self.queue_in.get(timeout=timeout)
         except queue.Empty:
             return
 
@@ -67,23 +69,11 @@ class Worker:
 
         return task
 
-    def _wait_batch(self) -> List[BaseTask]:
-        batch = []
-
-        # wait for the first task
-        while True:
-            task = self._wait_task(10.)
-            if task:
-                batch.append(task)
-                break
-            elif self._stop_task:
-                return []
-
-        # if batch size is 1, there is no need to wait anymore
-        if self._batch_size == 1:
-            return batch
-
-        # waiting for the rest of the batch
+    def _get_batch_with_timeout(self, batch: List[BaseTask]) -> List[BaseTask]:
+        """ Collecting incoming tasks into batch.
+        We will be waiting until number of tasks in batch would be equal `batch_size`.
+        If batch could not be fully collected in batch_timeout time -> return what we have at that time.
+        """
         timeout = self._batch_timeout
         while True:
             with timeit() as passed_time:
@@ -102,6 +92,46 @@ class Worker:
 
             # timeout should not be less then 1ms, to avoid unnecessary short sleeps
             timeout = max(timeout, 0.001)
+
+    def _get_batch_dynamic(self, batch):
+        """ Collecting incoming tasks into batch.
+        This method will not be waiting for batch_timeout to collect full batch,
+        we just simply get all tasks that are currently in the queue and making batch only from them.
+        """
+        while True:
+            task = self._wait_task(timeout=0.)
+            if task:
+                batch.append(task)
+                if len(batch) == self._batch_size:
+                    break
+            else:
+                break
+
+        return batch
+
+    def _wait_batch(self) -> List[BaseTask]:
+        batch = []
+
+        # wait for the first task
+        while True:
+            # wait for some long amount of time (10 secs), and wait again,
+            # until we eventually get a task
+            task = self._wait_task(10.)
+            if task:
+                batch.append(task)
+                break
+            elif self._stop_task:
+                return []
+
+        # if batch size is 1, there is no need to wait anymore
+        if self._batch_size == 1:
+            return batch
+
+        # waiting for the rest of the batch
+        if self._batch_timeout > 0:
+            return self._get_batch_with_timeout(batch)
+        else:
+            return self._get_batch_dynamic(batch)
 
     def _iter_batches(self) -> Iterator[Optional[List[BaseTask]]]:
         """ Returns iterator over input task batches.
