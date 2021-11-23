@@ -14,7 +14,7 @@ import docker
 import pandas as pd
 
 from .base import ReportRow, RpsCounterCfg, get_rps_counter_cfg
-from .pulemet_kassym import Pulemet
+from pulemet import Pulemet
 from .utils import MaxNumberFinder, run_cmd
 
 PROJ_ROOT = pathlib.Path(__file__).parent.parent

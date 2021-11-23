@@ -6,3 +6,4 @@ torchvision==0.10.0
 pandas==1.3.1
 docker~=5.0.0
 aiodogstatsd~=0.15.0
+pulemet~=1.1.0
