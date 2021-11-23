@@ -138,7 +138,13 @@ class MultiProcBatchHandler(BaseTaskHandler):
 @pytest.fixture
 async def flow_with_multiproc_bathcer(loop):
     async with run_flow(
-            Flow(FlowStep(MultiProcBatchHandler(), nprocs=2, batch_size=TASKS_BATCH_SIZE))
+            Flow(
+                FlowStep(
+                    MultiProcBatchHandler(),
+                    nprocs=2,
+                    batch_size=TASKS_BATCH_SIZE,
+                    batch_timeout=0.5,
+                ))
     ) as flow:
         yield flow
 
