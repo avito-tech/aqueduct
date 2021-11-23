@@ -82,6 +82,17 @@ async def flow_with_batch_handler(loop) -> Flow:
             FlowStep(
                 CatDetectorHandler(),
                 batch_size=TASKS_BATCH_SIZE,
+                batch_timeout=0.5,
+            ))) as flow:
+        yield flow
+
+
+@pytest.fixture
+async def flow_with_dynamic_batch_handler(loop) -> Flow:
+    async with run_flow(Flow(
+            FlowStep(
+                CatDetectorHandler(),
+                batch_size=TASKS_BATCH_SIZE,
             ))) as flow:
         yield flow
 
@@ -273,6 +284,16 @@ class TestFlow:
         await asyncio.wait_for(
             process_tasks(flow_with_batch_handler, tasks_batch),
             timeout=CatDetector.BATCH_PROCESS_TIME,
+        )
+        assert all(task.result for task in tasks_batch)
+
+    async def test_process_performance_with_dynamic_batching(self, flow_with_dynamic_batch_handler, tasks_batch):
+        """Checks that all tasks will be processed on time with dynamic batch handler.
+        `Dynamic` turns on when we are not specifying bath_timeout
+        """
+        await asyncio.wait_for(
+            process_tasks(flow_with_dynamic_batch_handler, tasks_batch),
+            timeout=CatDetector.BATCH_PROCESS_TIME + CatDetector.IMAGE_PROCESS_TIME,
         )
         assert all(task.result for task in tasks_batch)
 
