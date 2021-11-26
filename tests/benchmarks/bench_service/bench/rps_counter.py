@@ -127,7 +127,7 @@ async def send_requests(req: RequestData, rps: int, time_interval_secs: int) -> 
             session.request(req.method, req.url, json=req.json, timeout=req.timeout)
             for _ in range(rps * time_interval_secs)
         ]
-        pulemet = Pulemet(rps=rps, max_connections=10**6)
+        pulemet = Pulemet(rps=rps, pool_size=10**6)
         pulemet_coros = pulemet.process(coros)
 
         return await asyncio.gather(*pulemet_coros, return_exceptions=True)
