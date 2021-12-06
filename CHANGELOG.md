@@ -1,3 +1,6 @@
+# 1.10.1
+- fixed batch time measurement
+
 # 1.10.0
 - added dynamic batching strategy (used if batch_timeout = 0)
 - added `pulemet` as external dependency

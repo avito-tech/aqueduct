@@ -4,7 +4,10 @@ from typing import Callable, Iterator, List, Optional
 
 from .handler import BaseTaskHandler
 from .logger import log
-from .metrics.timer import timeit
+from .metrics.timer import (
+    Timer,
+    timeit,
+)
 from .task import BaseTask, StopTask
 
 
@@ -34,6 +37,7 @@ class Worker:
         self.step_name = self.task_handler.get_step_name(step_number)
         self._batch_size = batch_size
         self._batch_timeout = batch_timeout
+        self._batch_time: float = None  # noqa
         self._batch_lock = batch_lock
         self._stop_task: BaseTask = None  # noqa
 
@@ -111,6 +115,7 @@ class Worker:
 
     def _wait_batch(self) -> List[BaseTask]:
         batch = []
+        timer = Timer()
 
         # wait for the first task
         while True:
@@ -119,19 +124,22 @@ class Worker:
             task = self._wait_task(10.)
             if task:
                 batch.append(task)
+                timer.start()
                 break
             elif self._stop_task:
                 return []
 
-        # if batch size is 1, there is no need to wait anymore
-        if self._batch_size == 1:
-            return batch
+        # waiting for the rest of the batch if batch_size > 1
+        if self._batch_size > 1:
+            if self._batch_timeout > 0:
+                batch = self._get_batch_with_timeout(batch)
+            else:
+                batch = self._get_batch_dynamic(batch)
 
-        # waiting for the rest of the batch
-        if self._batch_timeout > 0:
-            return self._get_batch_with_timeout(batch)
-        else:
-            return self._get_batch_dynamic(batch)
+        timer.stop()
+        self._batch_time = timer.seconds
+
+        return batch
 
     def _iter_batches(self) -> Iterator[Optional[List[BaseTask]]]:
         """ Returns iterator over input task batches.
@@ -140,17 +148,16 @@ class Worker:
         If input task is expired or filtered by condition - it would not be placed in batch.
         """
         while True:
-            with timeit() as timer:
-                if self._batch_lock:
-                    # to take a queue_in lock for the duration of batch filling time
-                    with self._batch_lock:
-                        tasks_batch = self._wait_batch()
-                else:
+            if self._batch_lock:
+                # to take a queue_in lock for the duration of batch filling time
+                with self._batch_lock:
                     tasks_batch = self._wait_batch()
+            else:
+                tasks_batch = self._wait_batch()
 
-            if tasks_batch and len(tasks_batch) > 0:
+            if tasks_batch:
                 if self._batch_size > 1:
-                    tasks_batch[0].metrics.batch_times.add(self.step_name, timer.seconds)
+                    tasks_batch[0].metrics.batch_times.add(self.step_name, self._batch_time)
                     tasks_batch[0].metrics.batch_sizes.add(self.step_name, len(tasks_batch))
                 yield tasks_batch
 
