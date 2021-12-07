@@ -308,6 +308,16 @@ class TestFlow:
         await asyncio.gather(*[flow_with_multiproc_bathcer.process(task) for task in tasks_batch])
         assert len(set(task.result for task in tasks_batch)) == 1
 
+    async def test_process_batch_collecting_metrics(self, flow_with_batch_handler, tasks_batch):
+        """Checks that batch collecting time doesn't include the time for waiting for the first element."""
+        task = tasks_batch[0]
+        await asyncio.sleep(0.1)
+        await flow_with_batch_handler.process(task)
+        batch_timeout = flow_with_batch_handler._steps[0].batch_timeout
+        _, batch_time = flow_with_batch_handler._metrics_manager.collector._metrics.batch_times.items[0]
+
+        assert batch_time == pytest.approx(batch_timeout, rel=1e-2)
+
 
 async def test_segfault_due_to_update_shared_fields(array, array_sh_data, simple_flow):
     t1, t2 = BaseTask(), BaseTask()
