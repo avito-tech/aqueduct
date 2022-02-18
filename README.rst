@@ -4,22 +4,17 @@ Aqueduct
 
 Framework for performance-efficient prediction.
 
-Contact
-=======
-
-Feel free to ask questions in telegram `t.me/avito-ml <https://t.me/avito_ml>`_
-
-Key Features
+Key Benefits
 ============
 
-- Increase RPS (Requests Per Second) for your service
-- All optimisations in one library
-- Uses shared memory for transfer big data between processes
+- Increases the throughput of your machine learning-based service
+- Uses shared memory for instantaneous transfer of large amounts of data between processes
+- All optimizations in one library
 
-Get started
+Getting Started
 ===========
 
-Simple example how to start with aqueduct using aiohttp. For better examples see `examples <examples/>`_.
+This is a simple example of using Aqueduct, for more advanced one see `examples <examples/>`_.
 
 .. code-block:: python
 
@@ -28,25 +23,25 @@ Simple example how to start with aqueduct using aiohttp. For better examples see
     
     
     class MyModel:
-        """This is CPU bound model example."""
+        """This is an example of a CPU-bound model"""
         
         def process(self, number):
             return sum(i * i for i in range(number))
     
     class Task(BaseTask):
-        """Container to send arguments to model."""
+        """Container for sending arguments to the model."""
         def __init__(self, number):
             super().__init__()
             self.number = number
             self.sum = None  # result will be here
         
     class SumHandler(BaseTaskHandler):
-        """With aqueduct we need to wrap you're model."""
+        """When using Aqueduct, we need to wrap your model."""
         def __init__(self):
             self._model = None
     
         def on_start(self):
-            """Runs in child process, so memory no memory consumption in parent process."""
+            """Executed in a child process, so the parent process does not consume additional memory."""
             self._model = MyModel()
     
         def handle(self, *tasks: Task):
@@ -84,9 +79,9 @@ Simple example how to start with aqueduct using aiohttp. For better examples see
 Batching
 ========
 
-Aqueduct supports the ability to process tasks with batches.
-To use batching you simply should specify `batch_size` parameter that indicates, how many tasks could be in a batch.
-You can determine correct `batch_size` for your handler by manually measuring handler performance
+Aqueduct supports tasks processing in batches.
+To use batching, you just need to specify the `batch_size` parameter, which indicates how many tasks can be in a batch.
+You can determine the correct `batch_size` for your handler by manually measuring the performance of the handler
 for different batch sizes.
 
 .. code-block:: python
@@ -101,7 +96,7 @@ for different batch sizes.
 	from aqueduct.handler import BaseTaskHandler
 	from aqueduct.task import BaseTask
 
-	# this constant needs just for example
+	# this constant is only needed for an example
 	TASKS_BATCH_SIZE = 20
 
 
@@ -113,7 +108,7 @@ for different batch sizes.
 
 
 	class CatDetector:
-		"""GPU model emulator that predicts the presence of the cat in the image."""
+		"""GPU model emulator that predicts the presence of a cat in the image."""
 		IMAGE_PROCESS_TIME = 0.01
 		BATCH_REDUCTION_FACTOR = 0.7
 		OVERHEAD_TIME = 0.02
@@ -123,7 +118,7 @@ for different batch sizes.
 			"""Always says that there is a cat in the image.
 
 			The image is represented by a one-dimensional array.
-			The model spends less time for processing batch of images due to GPU optimizations. It's emulated
+			The model spends less time processing a batch of images due to GPU optimizations. It's emulated
 			with BATCH_REDUCTION_FACTOR coefficient.
 			"""
 			batch_size = images.shape[0]
@@ -154,14 +149,14 @@ for different batch sizes.
 	flow_with_batch_handler = Flow(FlowStep(CatDetectorHandler(), batch_size=TASKS_BATCH_SIZE))
 	flow_with_batch_handler.start()
 
-	# checks if no one result
+	# checks if there are no results
 	assert not any(task.result for task in tasks_batch)
-	# task handling takes 0.16 secs that is less than sequential task processing with 0.22 secs
+	# task handling takes 0.16s which is less than sequential task processing in 0.22s
 	await asyncio.wait_for(
 		process_tasks(flow_with_batch_handler, tasks_batch),
 		timeout=CatDetector.BATCH_PROCESS_TIME,
 	)
-	# checks if all results were set
+	# checks if all results are set
 	assert all(task.result for task in tasks_batch)
 
 	await flow_with_batch_handler.stop()
@@ -180,19 +175,20 @@ for different batch sizes.
 	await flow_with_batch_handler.stop()
 
 
-Aqueduct (by default) does not guaranty that handler would always be getting exact batch size.
-It may be less than `batch_size`, but newer greater.
-That is because we are not waiting for batch to be fully collected.
-This allows as to avoid overhead for low load scenarios, and on the other hand,
-if input requests would be frequent enough, real batch would always be equal `batch_size`.
-If you find that your handler performs better with specific, exact batch size,
-you can use additional `batch_timeout` parameter to specify time to wait for full batch to be collected.
+Aqueduct (by default) does not guarantee that the handler will always receive a batch of the exact size.
+It may be less than the `batch_size`, but never exceed it.
+This is because we are not waiting for the batch to be fully assembled.
+This allows us to avoid overhead in low-load scenarios and, on the other hand,
+if input requests are frequent enough, the real batch size will always be equal to the `batch_size`.
+If you found your handler performs better with a specific, exact batch size,
+you can use the optional `batch_timeout` parameter to limit the time of batch formation.
 
 Sentry
 ======
 
-The implementation allows you to receive logger events from the workers and the main process.
-To integrate with __Sentry__, you need to write something like this:
+Aqueduct allows you to receive logger events from workers and the main process.
+
+To integrate with `Sentry <https://sentry.io>`_, you need to write something like this:
 
 .. code-block:: python
 
@@ -210,3 +206,8 @@ To integrate with __Sentry__, you need to write something like this:
 		dsn = os.getenv('SENTRY_DSN')
 		sentry_handler = SentryHandler(client=Client(dsn=dsn, transport=HTTPTransport), level=logging.ERROR)
 		log.addHandler(sentry_handler)
+
+Contact Us
+=======
+
+Feel free to ask questions in Telegram: `t.me/avito-ml <https://t.me/avito_ml>`_
