@@ -45,12 +45,26 @@ class Worker:
         self.task_handler.on_start()
 
     def _wait_task(self, timeout: float) -> Optional[BaseTask]:
-        try:
-            if timeout == 0:
-                task: BaseTask = self.queue_in.get(block=False)
-            else:
-                task: BaseTask = self.queue_in.get(timeout=timeout)
-        except queue.Empty:
+        task = None
+        # There is a problem with Python MP Queue implementation.
+        # queue.get() can raise Empty exception even thou queue is in fact not empty.
+        # For example, if we have 10 tasks in a queue, we expect batch size to be 10, but it is not always true, because
+        #  after reading, say, 5 tasks, Python queue can tell as that there is nothing left, which is in fact false.
+        # In our implementation we use an additional spin over a queue to guarantee consistent results.
+        # More info: https://bugs.python.org/issue23582
+        while not task:
+            try:
+                if timeout == 0:
+                    task = self.queue_in.get(block=False)
+                else:
+                    task = self.queue_in.get(timeout=timeout)
+            except queue.Empty:
+                # additionaly check queue size to make sure that there is in fact no tasks there.
+                # if size > 0 then Empty exception was fake -> we should try to call get() again
+                if self.queue_in.qsize() == 0:
+                    break
+
+        if not task:
             return
 
         if isinstance(task, StopTask):
@@ -102,7 +116,9 @@ class Worker:
         we just simply get all tasks that are currently in the queue and making batch only from them.
         """
         while True:
+            task = None
             task = self._wait_task(timeout=0.)
+
             if task:
                 batch.append(task)
                 if len(batch) == self._batch_size:

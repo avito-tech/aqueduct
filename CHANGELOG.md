@@ -1,3 +1,6 @@
+# 1.10.2
+- fixed batch gatharing (batch was not always accumulate properly due to MP queue inconsistent behaviour)
+
 # 1.10.1
 - fixed batch time measurement
 
