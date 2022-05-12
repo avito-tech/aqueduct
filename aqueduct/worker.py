@@ -11,6 +11,8 @@ from .metrics.timer import (
 )
 from .task import BaseTask, StopTask
 
+MAX_SPIN_ITERATIONS=1000
+
 
 class Worker:
     """Обертка над классом BaseTaskHandler.
@@ -53,7 +55,11 @@ class Worker:
         #  after reading, say, 5 tasks, Python queue can tell as that there is nothing left, which is in fact false.
         # In our implementation we use an additional spin over a queue to guarantee consistent results.
         # More info: https://bugs.python.org/issue23582
-        while not task:
+        i = 0
+        while not task and i < MAX_SPIN_ITERATIONS:
+            # Limit our spin with maximum of MAX_SPIN_ITERATIONS just in case.
+            # We do not want long, purposeless iteration
+            i += 1
             try:
                 if timeout == 0:
                     task = self.queue_in.get(block=False)

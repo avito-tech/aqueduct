@@ -84,7 +84,7 @@ class TestWorker:
 
         Problem is queue.get() can raise Empty exception even thou queue is in fact not empty.
          For example, if we have 10 tasks in a queue, we expect batch size to be 10, but it is not always true, because
-         after reading, say, 5 tasks, Python queue can tell as that there is nothing left, which is in fact false.
+         after reading, say, 5 tasks, Python queue can tell us that there is nothing left, which is in fact false.
         In our implementation we use an additional spin over a queue to guarantee consistent results.
         More info: https://bugs.python.org/issue23582"""
         batch_size = 100
