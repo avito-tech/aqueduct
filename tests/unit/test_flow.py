@@ -287,10 +287,10 @@ class TestFlow:
 
     async def test_process_performance_with_batching(self, flow_with_batch_handler, tasks_batch):
         """Checks that all tasks will be processed on time with batch handler."""
-        await asyncio.wait_for(
-            process_tasks(flow_with_batch_handler, tasks_batch),
-            timeout=CatDetector.BATCH_PROCESS_TIME,
-        )
+        t0 = time.time()
+        await process_tasks(flow_with_batch_handler, tasks_batch),
+        t1 = time.time()
+        assert pytest.approx(t1 - t0, 0.2) == CatDetector.BATCH_PROCESS_TIME
         assert all(task.result for task in tasks_batch)
 
     async def test_process_performance_with_dynamic_batching(self, flow_with_dynamic_batch_handler, tasks_batch):

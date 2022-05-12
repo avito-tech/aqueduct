@@ -35,9 +35,9 @@ class Batch:
 
 def long_elements_producer(iq: multiprocessing.Queue):
     """Long non-blocking producer of elements."""
-    tic_elements = {1: 1, 4: 2, 6: 3, 9: 4}
+    tic_elements = {1: 1, 8: 2, 10: 3, 24: 4}
 
-    for tic in range(10):
+    for tic in range(25):
         if tic in tic_elements:
             iq.put(Task(tic_elements[tic]))
 
@@ -47,8 +47,8 @@ def long_elements_producer(iq: multiprocessing.Queue):
 @pytest.fixture
 def worker():
     def init(batch_size, batch_timeout) -> Tuple[Worker, multiprocessing.Queue]:
-        iq = multiprocessing.Queue(100)
-        oq = multiprocessing.Queue(100)
+        iq = multiprocessing.Queue(10000)
+        oq = multiprocessing.Queue(10000)
         worker = Worker(
             queue_in=iq,
             queue_out=oq,
@@ -77,6 +77,27 @@ class TestWorker:
 
         it = w._iter_batches()
         for res_batch in result:
+            assert next(it) == res_batch
+
+    def test_iter_batches_read_all_queue(self, worker):
+        """Tests that batcher read all available tasks from queue all the time.
+
+        Problem is queue.get() can raise Empty exception even thou queue is in fact not empty.
+         For example, if we have 10 tasks in a queue, we expect batch size to be 10, but it is not always true, because
+         after reading, say, 5 tasks, Python queue can tell us that there is nothing left, which is in fact false.
+        In our implementation we use an additional spin over a queue to guarantee consistent results.
+        More info: https://bugs.python.org/issue23582"""
+        batch_size = 100
+        elements = Batch(*range(0, 5000))
+        expected = [Batch(*range(i, i + batch_size)) for i in range(0, 5000, batch_size)]
+
+        w, iq = worker(100, 0.)
+
+        for item in elements.tasks:
+            iq.put(item)
+
+        it = w._iter_batches()
+        for res_batch in expected:
             assert next(it) == res_batch
 
     @pytest.mark.parametrize('timeout, result', [
