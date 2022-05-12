@@ -35,9 +35,9 @@ class Batch:
 
 def long_elements_producer(iq: multiprocessing.Queue):
     """Long non-blocking producer of elements."""
-    tic_elements = {1: 1, 4: 2, 6: 3, 9: 4}
+    tic_elements = {1: 1, 8: 2, 10: 3, 24: 4}
 
-    for tic in range(10):
+    for tic in range(25):
         if tic in tic_elements:
             iq.put(Task(tic_elements[tic]))
 

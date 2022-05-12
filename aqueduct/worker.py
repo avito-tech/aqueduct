@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import queue
+import sys
 from typing import Callable, Iterator, List, Optional
 
 from .handler import BaseTaskHandler
@@ -61,7 +62,9 @@ class Worker:
             except queue.Empty:
                 # additionaly check queue size to make sure that there is in fact no tasks there.
                 # if size > 0 then Empty exception was fake -> we should try to call get() again
-                if self.queue_in.qsize() == 0:
+                # since macos does not support qsize method - ignore that check
+                # (it would be greate to make a proper queue later)
+                if sys.platform == 'darwin' or self.queue_in.qsize() == 0:
                     break
 
         if not task:
