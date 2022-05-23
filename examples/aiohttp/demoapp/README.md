@@ -15,6 +15,12 @@ Stores data processing pipeline.
 Contains logic for wrapping pipeline steps into Aqueduct abstracts and logic for `Flow` creation.
 
 ## Run and test
+
+Cd to directory
+```shell
+cd examples/aiohttp/demoapp
+```
+
 Run python with installed requirements from `requirements.txt`.
 ```shell
 python -m demoapp.app
