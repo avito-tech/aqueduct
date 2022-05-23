@@ -1,4 +1,4 @@
-# Example aiohttp project using Aqueduct
+# Example Flask project using Aqueduct
 The service receives an image and returns the result of image classification.
 
 
