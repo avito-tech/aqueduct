@@ -256,6 +256,13 @@ class TestFlow:
 
         assert simple_flow.state == FlowState.STOPPED
 
+    async def test_cancelled_process_reraises_cancelled_error(self, slow_simple_flow, task):
+        with pytest.raises(asyncio.CancelledError):
+            future = asyncio.ensure_future(slow_simple_flow.process(task))
+            await asyncio.sleep(0.1)
+            future.cancel()
+            await future
+
     async def test_stop_finish_task_on_graceful(self, sleep_handlers, simple_flow, task):
         """Checks that task will be processed to the end after Flow stop command with graceful mode."""
         t = asyncio.ensure_future(simple_flow.process(task))

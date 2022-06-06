@@ -1,3 +1,6 @@
+# 1.10.3
+- fixed reraise asyncio.CancelledError if the cause of exception is external actor
+
 # 1.10.2
 - fixed batch gatharing (batch was not always accumulate properly due to MP queue inconsistent behaviour)
 
