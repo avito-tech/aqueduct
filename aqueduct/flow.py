@@ -145,7 +145,12 @@ class Flow:
                 raise FlowError('Task timeout error')
             except asyncio.CancelledError:
                 tasks_stats.cancel += 1
-                raise FlowError('Task was cancelled')
+                if self.state in (FlowState.STOPPING, FlowState.STOPPED):
+                    raise FlowError('Task was cancelled')
+                else:
+                    # process was cancelled by external actor, so reraise
+                    raise
+
             else:
                 tasks_stats.complete += 1
             finally:
