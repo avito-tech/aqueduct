@@ -1,4 +1,6 @@
 import asyncio
+import os
+import signal
 import sys
 
 from aqueduct.flow import Flow
@@ -18,7 +20,10 @@ async def observe_flows(app: web.Application, check_interval: float = 1.):
         for flow_name, flow in flows.items():
             if not flow.is_running:
                 log.info(f'Flow {flow_name} is not running, application will be stopped')
-                sys.exit(1)
+                pid = os.getpid()
+                # kill process with SIGTERM to ensure, that stopping would not be delayed by other code (like aiohttp)
+                os.kill(pid, signal.SIGTERM)
+
         await asyncio.sleep(check_interval)
 
 
