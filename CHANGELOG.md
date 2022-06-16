@@ -1,3 +1,6 @@
+# 1.10.4
+- fixed unfinished stopping on child process death
+
 # 1.10.3
 - fixed reraise asyncio.CancelledError if the cause of exception is external actor
 
