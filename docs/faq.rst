@@ -43,3 +43,7 @@ Why use `aqueduct.logger` instead of ?
 ```
 from aqueduct.logger import log as aqueduct_logger
 ```
+
+
+Can I replace model while service is working, without stopping service?
+-----------------------------------------------------------------------

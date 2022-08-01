@@ -1,6 +1,4 @@
 import asyncio
-import os
-import signal
 import sys
 
 from aqueduct.flow import Flow

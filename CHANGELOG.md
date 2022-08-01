@@ -1,3 +1,6 @@
+# 1.10.5
+- fixed bad upload to pypi.org
+
 # 1.10.4
 - fixed unfinished stopping on child process death
 
