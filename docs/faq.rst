@@ -13,13 +13,13 @@ What difference between `ProcessPoolExecutor`?
 ----------------------------------------------
 
 `ProcessPoolExecutor` is good and simple way to create subprocesses for cpu-bound operations.
-It is best for run monolitic model in suprocess.
+It is best for run monolithic model in subprocess.
 But when you splitting model into steps, move this steps to subprocesses and trying to make way to send parameters between
 supbrocesses then you reinventing aqueduct.
 
 You can look at `aqueduct` like it is `ProcessPoolExecutor` but with some additional features:
 
-- compartible with asyncio
+- compatible with asyncio
 - metrics for use in production
 - subprocess liveness detection
 - shared memory for sending data to subprocesses
