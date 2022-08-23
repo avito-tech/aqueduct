@@ -1,3 +1,6 @@
+# 1.10.6
+- Add missing imports to aiohttp integration and add return from observe_flows
+
 # 1.10.5
 - fixed bad upload to pypi.org
 

@@ -1,5 +1,6 @@
 import asyncio
-import sys
+import os
+import signal
 
 from aqueduct.flow import Flow
 from aqueduct.logger import log
@@ -21,6 +22,7 @@ async def observe_flows(app: web.Application, check_interval: float = 1.):
                 pid = os.getpid()
                 # kill process with SIGTERM to ensure, that stopping would not be delayed by other code (like aiohttp)
                 os.kill(pid, signal.SIGTERM)
+                return
 
         await asyncio.sleep(check_interval)
 
