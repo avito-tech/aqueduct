@@ -49,7 +49,7 @@ class AppIntegrator:
             self,
             app: web.Application,
             exit_on_fail: bool = True,
-            custom_logger: Optional[logging.Logger] = None,
+            logger: Optional[logging.Logger] = None,
     ) -> None:
         if AQUEDUCT_FLOW_NAMES in app:
             raise RuntimeError('AppIntegrator can be created only once. Reuse existing AppIntegrator.')
@@ -59,8 +59,8 @@ class AppIntegrator:
             self._app.on_startup.append(run_flows_observer)
             self._app.on_shutdown.append(stop_flows_observer)
         self._app.on_shutdown.append(stop_flows)
-        if custom_logger is not None:
-            replace_logger(custom_logger)
+        if logger is not None:
+            replace_logger(logger)
 
     def add_flow(self, flow: Flow, flow_name: str = FLOW_NAME, with_start: bool = True):
         if flow_name in self._app:

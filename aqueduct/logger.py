@@ -11,11 +11,11 @@ ch.setFormatter(formatter)
 log.addHandler(ch)
 
 
-def replace_logger(custom_logger: logging.Logger) -> None:
+def replace_logger(logger: logging.Logger) -> None:
     """Replaces default aqueduct logger with custom one"""
-    log.name = custom_logger.name
-    log.level = custom_logger.level
-    log.parent = custom_logger.parent
-    log.propagate = custom_logger.propagate
-    log.handlers = custom_logger.handlers
-    log.disabled = custom_logger.disabled
+    log.name = logger.name
+    log.level = logger.level
+    log.parent = logger.parent
+    log.propagate = logger.propagate
+    log.handlers = logger.handlers
+    log.disabled = logger.disabled
