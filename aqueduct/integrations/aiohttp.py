@@ -1,9 +1,11 @@
 import asyncio
+import logging
 import os
 import signal
+from typing import Optional
 
 from aqueduct.flow import Flow
-from aqueduct.logger import log
+from aqueduct.logger import log, replace_logger
 
 from aiohttp import web
 
@@ -43,7 +45,12 @@ async def stop_flows(app):
 
 class AppIntegrator:
     """Adds to app flows and actions to manage flows and app itself."""
-    def __init__(self, app: web.Application, exit_on_fail: bool = True):
+    def __init__(
+            self,
+            app: web.Application,
+            exit_on_fail: bool = True,
+            custom_logger: Optional[logging.Logger] = None,
+    ) -> None:
         if AQUEDUCT_FLOW_NAMES in app:
             raise RuntimeError('AppIntegrator can be created only once. Reuse existing AppIntegrator.')
         self._app = app
@@ -52,6 +59,8 @@ class AppIntegrator:
             self._app.on_startup.append(run_flows_observer)
             self._app.on_shutdown.append(stop_flows_observer)
         self._app.on_shutdown.append(stop_flows)
+        if custom_logger is not None:
+            replace_logger(custom_logger)
 
     def add_flow(self, flow: Flow, flow_name: str = FLOW_NAME, with_start: bool = True):
         if flow_name in self._app:

@@ -1,3 +1,6 @@
+# 1.10.7
+- Add ability to set custom logger
+
 # 1.10.6
 - Add missing imports to aiohttp integration and add return from observe_flows
 
