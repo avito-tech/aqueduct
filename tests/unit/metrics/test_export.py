@@ -22,6 +22,7 @@ from aqueduct.metrics.export import (
     QSIZE_PREFIX,
     TASKS_PREFIX,
     TRANSFER_TIME_PREFIX,
+    TASK_SIZE_PREFIX,
     ToStatsDMetricsExporter,
 )
 from tests.unit.conftest import (
@@ -130,6 +131,7 @@ class TestToAvioMetricsExporter:
         metrics = [m.decode() for m in statsd_metrics_buffer.data]
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{HANDLE_TIME_PREFIX}')) == 4
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{TRANSFER_TIME_PREFIX}')) == 4
+        assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{TASK_SIZE_PREFIX}')) == 4
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{BATCH_TIME_PREFIX}')) == 0
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{BATCH_SIZE_PREFIX}')) == 0
         assert sum(1 for m in metrics if m.startswith(f'{AQUEDUCT}.{QSIZE_PREFIX}')) == 4
@@ -166,6 +168,7 @@ class TestToAvioMetricsExporter:
         metrics: AqueductMetricsStorage = flow_without_metrics._metrics_manager.exporter.target
         assert not metrics.queue_sizes.items
         assert not metrics.transfer_times.items
+        assert not metrics.task_sizes.items
         assert not metrics.handle_times.items
         assert not metrics.batch_times.items
         assert not metrics.batch_sizes.items

@@ -1,3 +1,6 @@
+# 1.10.8
+- Add metric for task size in bytes
+
 # 1.10.7
 - Add ability to set custom logger
 

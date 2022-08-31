@@ -5,12 +5,14 @@ from .timer import TransferTimer
 class TasksMetricsStorage(IExtendable):
     def __init__(self):
         self.transfer_times = MetricsItems()
+        self.task_sizes = MetricsItems()
         self.handle_times = MetricsItems()
         self.batch_times = MetricsItems()
         self.batch_sizes = MetricsItems()
 
     def extend(self, storage: 'TasksMetricsStorage'):
         self.transfer_times.extend(storage.transfer_times)
+        self.task_sizes.extend(storage.task_sizes)
         self.handle_times.extend(storage.handle_times)
         self.batch_times.extend(storage.batch_times)
         self.batch_sizes.extend(storage.batch_sizes)
@@ -34,3 +36,7 @@ class TaskMetrics(TasksMetricsStorage):
         self._transfer_timer.stop()
         from_ = self._transfer_timer.transfer_from
         self.transfer_times.add(f'from_{from_}_to_{transfer_to}', self._transfer_timer.seconds)
+
+    def save_task_size(self, task_size: int, transfer_to: str):
+        from_ = self._transfer_timer.transfer_from
+        self.task_sizes.add(f'from_{from_}_to_{transfer_to}', task_size)
