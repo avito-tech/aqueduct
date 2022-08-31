@@ -10,6 +10,8 @@ from . import AQUEDUCT
 from .collect import AqueductMetricsStorage
 
 TRANSFER_TIME_PREFIX = 'transfer_time'
+QUEUE_TRANSFER_TIME_PREFIX = 'queue_transfer_time'
+QUEUE_WAIT_TIME_PREFIX = 'queue_wait_time'
 HANDLE_TIME_PREFIX = 'handle_time'
 BATCH_TIME_PREFIX = 'batch_time'
 BATCH_SIZE_PREFIX = 'batch_size'
@@ -53,6 +55,12 @@ class ToStatsDMetricsExporter(Exporter):
 
         for name, seconds in metrics.transfer_times.items:
             self.target.timing(f'{self.prefix}.{TRANSFER_TIME_PREFIX}.{name}', seconds * 1000)
+
+        for name, seconds in metrics.queue_transfer_times.items:
+            self.target.timing(f'{self.prefix}.{QUEUE_TRANSFER_TIME_PREFIX}.{name}', seconds * 1000)
+
+        for name, seconds in metrics.queue_wait_times.items:
+            self.target.timing(f'{self.prefix}.{QUEUE_WAIT_TIME_PREFIX}.{name}', seconds * 1000)
 
         for name, seconds in metrics.batch_times.items:
             self.target.timing(f'{self.prefix}.{BATCH_TIME_PREFIX}.{name}', seconds * 1000)

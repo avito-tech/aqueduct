@@ -5,6 +5,7 @@ from typing import Callable, Iterator, List, Optional
 
 from .handler import BaseTaskHandler
 from .logger import log
+from .metrics.queue import TaskMetricsQueue
 from .metrics.timer import (
     Timer,
     timeit,
@@ -81,7 +82,11 @@ class Worker:
             return
 
         log.debug(f'[{self.name}] Have message')
-        task.metrics.stop_transfer_timer(self.step_name)
+
+        task.metrics.stop_transfer_timer(
+            self.step_name,
+            getattr(self.queue_in, 'transfer_time', None),
+        )
 
         # don't pass an expired task to the next steps
         if task.is_expired():
