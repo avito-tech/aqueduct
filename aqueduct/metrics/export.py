@@ -10,6 +10,7 @@ from . import AQUEDUCT
 from .collect import AqueductMetricsStorage
 
 TRANSFER_TIME_PREFIX = 'transfer_time'
+TASK_SIZE_PREFIX = 'task_size'
 HANDLE_TIME_PREFIX = 'handle_time'
 BATCH_TIME_PREFIX = 'batch_time'
 BATCH_SIZE_PREFIX = 'batch_size'
@@ -62,6 +63,9 @@ class ToStatsDMetricsExporter(Exporter):
 
         for name, size in metrics.queue_sizes.items:
             self.target.timing(f'{self.prefix}.{QSIZE_PREFIX}.{name}', size)
+
+        for name, size in metrics.task_sizes.items:
+            self.target.timing(f'{self.prefix}.{TASK_SIZE_PREFIX}.{name}', size)
 
         for name, cnt in metrics.tasks_stats.items:
             if cnt > 0:

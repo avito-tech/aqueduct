@@ -21,6 +21,7 @@ from .metrics import MAIN_PROCESS, MetricsTypes
 from .metrics.collect import Collector, TasksStats
 from .metrics.export import Exporter
 from .metrics.manager import get_metrics_manager
+from .metrics.queue import TaskMetricsQueue
 from .metrics.timer import timeit
 from .multiprocessing import (
     ProcessContext,
@@ -215,11 +216,11 @@ class Flow:
         start_barrier = Barrier(total_procs)
 
         queue_size = self._calc_queue_size(self._steps[0])
-        self._queues.append(mp.Queue(queue_size))
+        self._queues.append(TaskMetricsQueue(queue_size))
 
         for step_number, step in enumerate(self._steps, 1):
             queue_size = self._calc_queue_size(step)
-            self._queues.append(mp.Queue(queue_size))
+            self._queues.append(TaskMetricsQueue(queue_size))
             worker_curr = Worker(
                 self._queues[-2],
                 self._queues[-1],
@@ -295,6 +296,9 @@ class Flow:
                     continue
 
                 task.metrics.stop_transfer_timer(MAIN_PROCESS)
+                task_size = getattr(self._queues[-1], 'task_size', None)
+                if task_size:
+                    task.metrics.save_task_size(task_size, MAIN_PROCESS)
 
                 future = self._task_futures.get(task.task_id)
 
