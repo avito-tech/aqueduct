@@ -18,6 +18,8 @@ Documentation
 - `Getting started <docs/getting_started.rst>`_
 - `Batching <docs/batching.rst>`_
 - `F.A.Q. <docs/faq.rst>`_
+- `Logging <docs/logging.rst>`_
+- `Metrics <docs/metrics.rst>`_
 - Additional features
 - - `Sentry support <docs/sentry.rst>`_
 

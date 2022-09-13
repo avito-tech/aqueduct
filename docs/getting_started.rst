@@ -4,6 +4,7 @@ Getting Started
 This is a simple example of using Aqueduct, for more advanced one see `examples <../examples/>`_.
 
 .. code-block:: python
+    import asyncio
 
     from aiohttp import web
     from aqueduct import Flow, FlowStep, BaseTaskHandler, BaseTask
@@ -60,4 +61,5 @@ This is a simple example of using Aqueduct, for more advanced one see `examples 
 
 
     if __name__ == '__main__':
-        web.run_app(prepare_app())
+        loop = asyncio.get_event_loop()
+        web.run_app(prepare_app(), loop=loop)
