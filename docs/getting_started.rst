@@ -4,6 +4,7 @@ Getting Started
 This is a simple example of using Aqueduct, for more advanced one see `examples <../examples/>`_.
 
 .. code-block:: python
+
     import asyncio
 
     from aiohttp import web
