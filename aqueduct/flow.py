@@ -1,5 +1,6 @@
 import asyncio
 import multiprocessing as mp
+import operator
 import os
 import queue
 import signal
@@ -9,7 +10,7 @@ from functools import cached_property
 from functools import reduce
 from multiprocessing import Barrier
 from threading import BrokenBarrierError
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Literal, Optional, Union
 
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.resource_tracker import _resource_tracker  # noqa
@@ -47,7 +48,7 @@ class FlowStep:
     def __init__(
             self,
             handler: BaseTaskHandler,
-            handle_condition: Callable[[BaseTask], bool] = lambda x: True,
+            handle_condition: Callable[[BaseTask], bool] = operator.truth,
             nprocs: int = 1,
             batch_size: int = 1,
             batch_timeout: float = 0,
@@ -75,6 +76,7 @@ class Flow:
             metrics_collector: Collector = None,
             metrics_exporter: Exporter = None,
             queue_size: Optional[int] = None,
+            mp_start_method: Literal['fork', 'spawn', 'forkserver'] = 'fork',
     ):
         _check_env()
 
@@ -84,6 +86,7 @@ class Flow:
         self._queues: List[mp.Queue] = []
         self._task_futures: Dict[str, asyncio.Future] = {}
         self._queue_size: Optional[int] = queue_size
+        self._mp_start_method = mp_start_method
 
         if not metrics_enabled:
             log.warn('Metrics collecting is disabled')
@@ -233,7 +236,7 @@ class Flow:
             )
             self._contexts[step.handler] = start_processes(
                 worker_curr.loop,
-                nprocs=step.nprocs, join=False, daemon=True, start_method='fork',
+                nprocs=step.nprocs, join=False, daemon=True, start_method=self._mp_start_method,
                 args=(start_barrier,),
             )
             log.info(f'Created step {step.handler}, '
