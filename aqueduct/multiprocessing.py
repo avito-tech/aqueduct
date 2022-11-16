@@ -9,6 +9,7 @@ import multiprocessing
 import multiprocessing.connection
 import signal
 import sys
+import time
 from typing import List, Optional
 
 from .exceptions import AqueductError
@@ -158,7 +159,8 @@ class ProcessContext:
         raise ProcessRaisedException(msg, error_index, failed_process.pid)
 
 
-def start_processes(fn, args=(), nprocs=1, join=True, daemon=False, start_method='spawn'):
+def start_processes(fn, args=(), nprocs=1, join=True, daemon=False,
+                    start_method='spawn', on_start_timeout: float = 0):
     r"""Starts ``nprocs`` processes that run ``fn`` with ``args``.
 
     If one of the processes exits with a non-zero exit status, the
@@ -183,6 +185,7 @@ def start_processes(fn, args=(), nprocs=1, join=True, daemon=False, start_method
         daemon (bool): The started processes' daemon flag. If set to True,
                        daemonic processes will be created.
         start_method (string): Start method.
+        on_start_timeout (float): Timeout in sec to wait for all subprocesses to start
 
     Returns:
         None if ``join`` is ``True``,
@@ -205,6 +208,13 @@ def start_processes(fn, args=(), nprocs=1, join=True, daemon=False, start_method
 
     context = ProcessContext(processes, error_queues)
     if not join:
+        # to prevent the parent process from exiting before the child processes have started
+        if nprocs > 1 and start_method != 'fork':
+            if on_start_timeout != 0.0:
+                time.sleep(on_start_timeout)
+            else:
+                logger.warning('on_start_timeout is not set, '
+                               'may cause FileNotFoundError for heavy weight subprocess.')
         return context
 
     # Loop on join until it returns True or raises an exception.
