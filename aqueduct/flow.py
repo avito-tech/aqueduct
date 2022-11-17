@@ -15,7 +15,7 @@ from typing import Callable, Dict, List, Literal, Optional, Union
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.resource_tracker import _resource_tracker  # noqa
 
-from .exceptions import FlowError, NotRunningError
+from .exceptions import FlowError, MPStartMethodValueError, NotRunningError
 from .handler import BaseTaskHandler
 from .logger import log
 from .metrics import MAIN_PROCESS, MetricsTypes
@@ -88,6 +88,13 @@ class Flow:
         self._queues: List[mp.Queue] = []
         self._task_futures: Dict[str, asyncio.Future] = {}
         self._queue_size: Optional[int] = queue_size
+
+        if mp_start_method != "fork" and mp_start_method != mp.get_start_method():
+            log.error(f'MP start method {mp_start_method!r} is set for Flow, it should also be set'
+                      f' in the if __name__ == "__main__" clause of the main module')
+            raise MPStartMethodValueError(f'Multiprocessing start method mismatch: '
+                                          f'got {mp.get_start_method()!r} for main process '
+                                          f'and {mp_start_method!r} for Flow')
         self._mp_start_method = mp_start_method
 
         if not metrics_enabled:
