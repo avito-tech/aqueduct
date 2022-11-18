@@ -1,5 +1,6 @@
 import asyncio
 import multiprocessing as mp
+import operator
 import os
 import queue
 import signal
@@ -9,12 +10,12 @@ from functools import cached_property
 from functools import reduce
 from multiprocessing import Barrier
 from threading import BrokenBarrierError
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Literal, Optional, Union
 
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.resource_tracker import _resource_tracker  # noqa
 
-from .exceptions import FlowError, NotRunningError
+from .exceptions import FlowError, MPStartMethodValueError, NotRunningError
 from .handler import BaseTaskHandler
 from .logger import log
 from .metrics import MAIN_PROCESS, MetricsTypes
@@ -47,10 +48,11 @@ class FlowStep:
     def __init__(
             self,
             handler: BaseTaskHandler,
-            handle_condition: Callable[[BaseTask], bool] = lambda x: True,
+            handle_condition: Callable[[BaseTask], bool] = operator.truth,
             nprocs: int = 1,
             batch_size: int = 1,
             batch_timeout: float = 0,
+            on_start_timeout: float = 0,
     ):
         _check_env()
         self.handler = handler
@@ -58,6 +60,7 @@ class FlowStep:
         self.nprocs = nprocs
         self.batch_size = batch_size
         self.batch_timeout = batch_timeout
+        self.on_start_timeout = on_start_timeout
 
 
 class FlowState(Enum):
@@ -75,6 +78,7 @@ class Flow:
             metrics_collector: Collector = None,
             metrics_exporter: Exporter = None,
             queue_size: Optional[int] = None,
+            mp_start_method: Literal['fork', 'spawn', 'forkserver'] = 'fork',
     ):
         _check_env()
 
@@ -84,6 +88,14 @@ class Flow:
         self._queues: List[mp.Queue] = []
         self._task_futures: Dict[str, asyncio.Future] = {}
         self._queue_size: Optional[int] = queue_size
+
+        if mp_start_method != "fork" and mp_start_method != mp.get_start_method():
+            log.error(f'MP start method {mp_start_method!r} is set for Flow, it should also be set'
+                      f' in the if __name__ == "__main__" clause of the main module')
+            raise MPStartMethodValueError(f'Multiprocessing start method mismatch: '
+                                          f'got {mp.get_start_method()!r} for main process '
+                                          f'and {mp_start_method!r} for Flow')
+        self._mp_start_method = mp_start_method
 
         if not metrics_enabled:
             log.warn('Metrics collecting is disabled')
@@ -233,8 +245,9 @@ class Flow:
             )
             self._contexts[step.handler] = start_processes(
                 worker_curr.loop,
-                nprocs=step.nprocs, join=False, daemon=True, start_method='fork',
+                nprocs=step.nprocs, join=False, daemon=True, start_method=self._mp_start_method,
                 args=(start_barrier,),
+                on_start_timeout=step.on_start_timeout,
             )
             log.info(f'Created step {step.handler}, '
                      f'queue_in: {self._queues[-2]}, queue_out:{self._queues[-1]}')

@@ -306,7 +306,7 @@ class TestFlow:
         """
         await asyncio.wait_for(
             process_tasks(flow_with_dynamic_batch_handler, tasks_batch),
-            timeout=CatDetector.BATCH_PROCESS_TIME + CatDetector.IMAGE_PROCESS_TIME,
+            timeout=CatDetector.BATCH_PROCESS_TIME + CatDetector.IMAGE_PROCESS_TIME + CatDetector.OVERHEAD_TIME,
         )
         assert all(task.result for task in tasks_batch)
 

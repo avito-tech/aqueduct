@@ -1,3 +1,6 @@
+# 1.10.9
+- Add ability to set different subprocess start methods and on_start_timeout for heavyweight models
+
 # 1.10.8
 - Add metric for task size in bytes
 
