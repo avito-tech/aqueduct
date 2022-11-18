@@ -160,7 +160,7 @@ class ProcessContext:
 
 
 def start_processes(fn, args=(), nprocs=1, join=True, daemon=False,
-                    start_method='spawn', on_start_timeout: float = 0):
+                    start_method='spawn', on_start_wait: float = 0):
     r"""Starts ``nprocs`` processes that run ``fn`` with ``args``.
 
     If one of the processes exits with a non-zero exit status, the
@@ -185,7 +185,7 @@ def start_processes(fn, args=(), nprocs=1, join=True, daemon=False,
         daemon (bool): The started processes' daemon flag. If set to True,
                        daemonic processes will be created.
         start_method (string): Start method.
-        on_start_timeout (float): Timeout in sec to wait for all subprocesses to start
+        on_start_wait (float): Timeout in sec to wait for all subprocesses to start
 
     Returns:
         None if ``join`` is ``True``,
@@ -210,10 +210,10 @@ def start_processes(fn, args=(), nprocs=1, join=True, daemon=False,
     if not join:
         # to prevent the parent process from exiting before the child processes have started
         if nprocs > 1 and start_method != 'fork':
-            if on_start_timeout != 0.0:
-                time.sleep(on_start_timeout)
+            if on_start_wait != 0.0:
+                time.sleep(on_start_wait)
             else:
-                logger.warning('on_start_timeout is not set, '
+                logger.warning('on_start_wait is not set, '
                                'may cause FileNotFoundError for heavy weight subprocess.')
         return context
 

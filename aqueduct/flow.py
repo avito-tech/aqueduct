@@ -52,7 +52,7 @@ class FlowStep:
             nprocs: int = 1,
             batch_size: int = 1,
             batch_timeout: float = 0,
-            on_start_timeout: float = 0,
+            on_start_wait: float = 0,
     ):
         _check_env()
         self.handler = handler
@@ -60,7 +60,7 @@ class FlowStep:
         self.nprocs = nprocs
         self.batch_size = batch_size
         self.batch_timeout = batch_timeout
-        self.on_start_timeout = on_start_timeout
+        self.on_start_wait = on_start_wait
 
 
 class FlowState(Enum):
@@ -247,7 +247,7 @@ class Flow:
                 worker_curr.loop,
                 nprocs=step.nprocs, join=False, daemon=True, start_method=self._mp_start_method,
                 args=(start_barrier,),
-                on_start_timeout=step.on_start_timeout,
+                on_start_wait=step.on_start_wait,
             )
             log.info(f'Created step {step.handler}, '
                      f'queue_in: {self._queues[-2]}, queue_out:{self._queues[-1]}')
