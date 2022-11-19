@@ -1,3 +1,6 @@
+# 1.10.10
+- Change name `on_start_timeout` to `on_start_wait`
+
 # 1.10.9
 - Add ability to set different subprocess start methods and on_start_timeout for heavyweight models
 
