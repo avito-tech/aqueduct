@@ -29,6 +29,8 @@ from typing import (
     Any,
     Dict,
     Tuple,
+    Type,
+    Union,
 )
 
 import numpy as np
@@ -166,6 +168,26 @@ class NPArraySharedData(SharedData):
         return shared_data
 
 
+class BytesSharedData(SharedData):
+    def __init__(self, shm_wrapper: SharedMemoryWrapper, size: int, cls_byte: Type[Union[bytes, bytearray]]):
+        self._size = size
+        self._cls_byte = cls_byte
+        super().__init__(shm_wrapper)
+
+    def get_data(self) -> bytes:
+        if self.shm_wrapper.buf is None:
+            raise ValueError('No shared memory buffer')
+        return self._cls_byte(self.shm_wrapper.buf[0:self._size])
+
+    @classmethod
+    def create_from_data(cls, data: Union[bytes, bytearray]) -> 'BytesSharedData':
+        nbytes = len(data)
+        shm_wrapper = SharedMemoryWrapper(nbytes)
+        shared_data = cls(shm_wrapper, nbytes, type(data))
+        shm_wrapper.buf[0:nbytes] = data
+        return shared_data
+
+
 class SharedFieldsMixin:
     """Позволяет заменить значение поля экземпляра класса на его копию в разделяемой памяти."""
 
@@ -194,6 +216,8 @@ class SharedFieldsMixin:
     def _get_shared_value(value: Any) -> SharedData:
         if isinstance(value, np.ndarray):
             return NPArraySharedData.create_from_data(value)
+        if isinstance(value, (bytes, bytearray)):
+            return BytesSharedData.create_from_data(value)
         raise ValueError(f'Type {type(value)} cannot be shared')
 
     def _set_shared_value(self, field_name: str, shared_value: SharedData):

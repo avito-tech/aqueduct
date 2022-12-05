@@ -1,3 +1,6 @@
+# 1.10.11
+- add support type bytes or bytearray for share memory in BaseTask
+
 # 1.10.10
 - Change name `on_start_timeout` to `on_start_wait`
 
