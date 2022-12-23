@@ -15,7 +15,9 @@ Key Benefits
 Documentation
 =============
 
-- `Getting started <docs/getting_started.rst>`_
+- Getting started
+- - `Fundamentals <docs/fundamentals.rst>`_
+- - `Example <docs/example.rst>`_
 - `Batching <docs/batching.rst>`_
 - `F.A.Q. <docs/faq.rst>`_
 - `Logging <docs/logging.rst>`_
