@@ -19,6 +19,7 @@ from abc import (
     abstractmethod,
 )
 
+from aiohttp.streams import StreamReader
 from cffi import FFI
 
 try:
@@ -194,10 +195,28 @@ class SharedFieldsMixin:
     def __init__(self, *args, **kwargs):
         self._shared_fields: Dict[str, SharedData] = {}
         super().__init__(*args, **kwargs)
+    
+    def create_shared_memory(self, field_name: str, size: int):
+        """Создает в указаном атрибуте field_name разделяемую память типа bytes размера size"""
+        shm_wrapper = SharedMemoryWrapper(size)
+        shared_value = BytesSharedData(shm_wrapper, size, bytes)
+        self._shared_fields[field_name] = shared_value
+    
+    async def read_to_shared_memory_from_payload(self, content: StreamReader, field_name: str):
+        """Читать данные с aiohttp.streams.StreamReader в указанный атрибут field_name"""
+        buffer = self._shared_fields[field_name].shm_wrapper.buf
+        offset = 0
+        while True:
+            block = await content.readany()
+            if not block:
+                break
+            buffer[offset: offset+len(block)] = block
+            offset += len(block)
+
+        self.__dict__[field_name] = self._shared_fields[field_name].get_data()
 
     def share_value(self, field_name: str):
         """Заменяет значение поля на его копию в разделяемой памяти.
-
         Все последующие изменения значения будут производиться в разделяемой памяти, т.е. эти изменения
         будут отражаться во всех объектах, которые ссылаются на эту же область памяти.
         В случае замены значения необходимо заново вызвать данный метод, чтобы значение попало в
