@@ -197,13 +197,13 @@ class SharedFieldsMixin:
         super().__init__(*args, **kwargs)
     
     def create_shared_memory(self, field_name: str, size: int):
-        """Создает в указаном атрибуте field_name разделяемую память типа bytes размера size"""
+        """Creates in the specified field_name attribute a shared memory of type bytes of size"""
         shm_wrapper = SharedMemoryWrapper(size)
         shared_value = BytesSharedData(shm_wrapper, size, bytes)
         self._shared_fields[field_name] = shared_value
     
-    async def read_to_shared_memory_from_payload(self, content: StreamReader, field_name: str):
-        """Читать данные с aiohttp.streams.StreamReader в указанный атрибут field_name"""
+    async def read_to_shared_memory(self, content: StreamReader, field_name: str):
+        """Read data from aiohttp.streams.StreamReader to the specified field_name attribute"""
         buffer = self._shared_fields[field_name].shm_wrapper.buf
         offset = 0
         while True:
