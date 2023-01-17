@@ -31,6 +31,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    Protocol
 )
 
 import numpy as np
@@ -188,16 +189,39 @@ class BytesSharedData(SharedData):
         return shared_data
 
 
+class HasReadany(Protocol):
+    """We need only single method from aiohttp.streams.StreamReader"""
+    async def readany(self) -> bytes:
+        pass
+
+
 class SharedFieldsMixin:
     """Позволяет заменить значение поля экземпляра класса на его копию в разделяемой памяти."""
 
     def __init__(self, *args, **kwargs):
         self._shared_fields: Dict[str, SharedData] = {}
         super().__init__(*args, **kwargs)
+    
+    async def share_value_with_data(self, field_name: str, content: HasReadany, size: int):
+        """Creates a shared memory in field_name attribute of type bytes of size
+        and loads data there from a source that has async method readany
+        """
+
+        shm_wrapper = SharedMemoryWrapper(size)
+        shared_value = BytesSharedData(shm_wrapper, size, bytes)
+
+        offset = 0
+        while True:
+            block = await content.readany()
+            if not block:
+                break
+            shm_wrapper.buf[offset: offset+len(block)] = block
+            offset += len(block)
+        
+        self._set_shared_value(field_name, shared_value)
 
     def share_value(self, field_name: str):
         """Заменяет значение поля на его копию в разделяемой памяти.
-
         Все последующие изменения значения будут производиться в разделяемой памяти, т.е. эти изменения
         будут отражаться во всех объектах, которые ссылаются на эту же область памяти.
         В случае замены значения необходимо заново вызвать данный метод, чтобы значение попало в
