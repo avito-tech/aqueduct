@@ -19,7 +19,6 @@ from abc import (
     abstractmethod,
 )
 
-from aiohttp.streams import StreamReader
 from cffi import FFI
 
 try:
@@ -32,6 +31,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    Protocol
 )
 
 import numpy as np
@@ -189,6 +189,12 @@ class BytesSharedData(SharedData):
         return shared_data
 
 
+class HasReadany(Protocol):
+    """We need only single method from aiohttp.streams.StreamReader"""
+    async def readany(self) -> bytes:
+        pass
+
+
 class SharedFieldsMixin:
     """Позволяет заменить значение поля экземпляра класса на его копию в разделяемой памяти."""
 
@@ -196,24 +202,23 @@ class SharedFieldsMixin:
         self._shared_fields: Dict[str, SharedData] = {}
         super().__init__(*args, **kwargs)
     
-    def create_shared_memory(self, field_name: str, size: int):
-        """Creates in the specified field_name attribute a shared memory of type bytes of size"""
+    async def share_value_with_data(self, field_name: str, content: HasReadany, size: int):
+        """Creates a shared memory in field_name attribute of type bytes of size
+        and loads data there from a source that has async method readany
+        """
+
         shm_wrapper = SharedMemoryWrapper(size)
         shared_value = BytesSharedData(shm_wrapper, size, bytes)
-        self._shared_fields[field_name] = shared_value
-    
-    async def read_to_shared_memory(self, content: StreamReader, field_name: str):
-        """Read data from aiohttp.streams.StreamReader to the specified field_name attribute"""
-        buffer = self._shared_fields[field_name].shm_wrapper.buf
+
         offset = 0
         while True:
             block = await content.readany()
             if not block:
                 break
-            buffer[offset: offset+len(block)] = block
+            shm_wrapper.buf[offset: offset+len(block)] = block
             offset += len(block)
-
-        self.__dict__[field_name] = self._shared_fields[field_name].get_data()
+        
+        self._set_shared_value(field_name, shared_value)
 
     def share_value(self, field_name: str):
         """Заменяет значение поля на его копию в разделяемой памяти.

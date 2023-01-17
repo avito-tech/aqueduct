@@ -1,6 +1,5 @@
 # 1.10.12
-- Add the ability to create a shared memory with no value
-- And load data from a readable source into that shared memory
+- Add a new async method share_value_with_data to the BaseTask class
 
 # 1.10.11
 - add support type bytes or bytearray for share memory in BaseTask

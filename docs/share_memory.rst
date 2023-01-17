@@ -15,7 +15,7 @@ This is a simple example of using shared memory in Aqueduct .
         """This is an example of a CPU-bound model"""
 
         def process(self, image):
-            """do something with image on cpu"""
+            """do something with image on CPU"""
             pass
 
     class Task(BaseTask):
@@ -45,8 +45,11 @@ This is a simple example of using shared memory in Aqueduct .
 
         async def post(self):
             task = Task()
-            task.create_shared_memory('image', self.request.content_length)
-            await task.read_to_shared_memory(self.request.content, 'image')
+            await task.share_value_with_data(
+                field_name='image', 
+                content=self.request.content,
+                size=self.request.content_length,
+            )
 
             await self.request.app['flow'].process(task)
             return web.json_response(data={'result': task.image_processed})
