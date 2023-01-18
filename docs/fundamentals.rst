@@ -74,8 +74,10 @@ Example
 Shared memory fields
 =====================
 Aqueduct simplifies the use of shared memory between steps (os processes).
-You first should create a ``Task`` class inherited from ``BaseTask``. Add field of type ``bytes``, ``bytearray`` or numpy array.
-And before sending the task to the ``process`` method you should call the task's method ``share_value`` with the name of the field you want to move to shared memory
+You first should create a ``Task`` class inherited from ``BaseTask``. Add field of type ``bytes``.
+And before sending the task to the ``process`` method, it is best to call task method ``share_value_with_data`` 
+with the field name, and the data source which has ``readany`` method, most often it will be class ``aiohttp.streams.StreamReader`` 
+which lies in ``request.content`` and size of this data which you want to move to shared memory.
 
 Example
 -------
@@ -84,20 +86,57 @@ Example
     from aqueduct import BaseTask
 
     class MyTask(BaseTask):
-        image: bytes
+        image: Optional[bytes]
         result: Optional[int]
 
-        def __init__(self, image: bytes):
+        def __init__(self, image: Optional[bytes] = None):
             super().__init__()
             self.image = image
             self.result = None
     
-    image_data = b''
-    with open('image.jpg', 'br') as img_file:
-        image_data = img_file.read()
-    task = MyTask(image=image_data)
-    task.share_value('image')
+    task = Task()
+    await task.share_value_with_data(
+        field_name='image', 
+        content=request.content,
+        size=request.content_length,
+    )
     await flow.process(task)
+
+If you have data of type (``bytes`` or ``np.ndarray``) in your method call ``process``
+and you want to move this data through shared memory to the next step, it is better 
+to use method ``share_value`` with field name where this data is
+
+Example
+-------
+.. code-block:: python
+
+        import asyncio
+
+    from aiohttp import web
+    from aqueduct import Flow, FlowStep, BaseTaskHandler, BaseTask
+
+
+    class MyModel:
+        """This is an example of a CPU-bound model"""
+
+        def process(self, image):
+            """do something with image on CPU"""
+            pass
+
+    class ImageHandler(BaseTaskHandler):
+        """When using Aqueduct, we need to wrap your model."""
+        def __init__(self):
+            self._model = None
+
+        def on_start(self):
+            """Executed in a child process, so the parent process does not consume additional memory."""
+            self._model = MyModel()
+
+        def handle(self, *tasks: Task):
+            """List of tasks because it can be batching."""
+            for task in tasks:
+                task.image_processed = self._model.process(task.image)
+                task.share_value('image_processed')
 
 
 Handler
