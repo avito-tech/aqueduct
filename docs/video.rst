@@ -1,4 +1,4 @@
-Videos
+Video
 ===============
 
 What is it
