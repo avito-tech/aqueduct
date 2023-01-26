@@ -15,6 +15,7 @@ Key Benefits
 Documentation
 =============
 
+- `Videos about aqueduct <docs/videos.rst>`_
 - Getting started
 - - `Fundamentals <docs/fundamentals.rst>`_
 - - `Example <docs/example.rst>`_
