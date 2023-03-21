@@ -262,6 +262,10 @@ class Flow:
             log.info(f'Created step {step.handler}, '
                      f'queue_in: {self._queues[-2]}, queue_out:{self._queues[-1]}')
 
+        # fix to avoid deadlock on program exit
+        for queue in self._queues:
+            queue.cancel_join_thread()
+
         try:
             log.info(f'Waiting for all workers to startup for {timeout} seconds...')
             start_barrier.wait(timeout)
