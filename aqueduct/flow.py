@@ -253,7 +253,7 @@ class Flow:
                      f'queue_in: {self._queues[-2]}, queue_out:{self._queues[-1]}')
 
         try:
-            log.info('Waiting for all workers to startup...')
+            log.info(f'Waiting for all workers to startup for {timeout} seconds...')
             start_barrier.wait(timeout)
         except BrokenBarrierError:
             raise TimeoutError('Starting timeout expired')
