@@ -10,6 +10,7 @@ from functools import cached_property
 from functools import reduce
 from multiprocessing import Barrier
 from threading import BrokenBarrierError
+from time import monotonic
 from typing import Callable, Dict, List, Literal, Optional, Union
 
 from concurrent.futures import ThreadPoolExecutor
@@ -65,6 +66,7 @@ class FlowStep:
 
 class FlowState(Enum):
     RUNNING = 'running'
+    STARTING = 'starting'
     STOPPING = 'stopping'
     STOPPED = 'stopped'
 
@@ -120,6 +122,7 @@ class Flow:
         raising FlowError if 'timeout' is set and some handler was not able to initialize in time.
         """
         log.info('Flow is starting')
+        self._state = FlowState.STARTING
         self._run_steps(timeout)
         self._run_tasks()
         self._state = FlowState.RUNNING
@@ -141,7 +144,9 @@ class Flow:
 
             task.set_timeout(timeout_sec)
             task.metrics.start_transfer_timer(MAIN_PROCESS)
-            while True:
+
+            start_time = monotonic()
+            while self.state != FlowState.STOPPED and (monotonic() - start_time) < timeout_sec:
                 try:
                     self._queues[0].put(task, block=False)
                 except queue.Full:
@@ -149,9 +154,14 @@ class Flow:
                 else:
                     break
 
+            elapsed_time = monotonic() - start_time
+
             tasks_stats = TasksStats()
             try:
-                finished_task: BaseTask = await asyncio.wait_for(future, timeout=timeout_sec)
+                finished_task: BaseTask = await asyncio.wait_for(
+                    future,
+                    timeout=(timeout_sec - elapsed_time),
+                )
             # todo is it correct to hide a specific error behind a general FlowError?
             except asyncio.TimeoutError:
                 tasks_stats.timeout += 1
@@ -299,7 +309,7 @@ class Flow:
         loop = asyncio.get_event_loop()
 
         with ThreadPoolExecutor(max_workers=1) as queue_fetch_executor:
-            while True:
+            while self.state != FlowState.STOPPED:
                 task = await loop.run_in_executor(
                     queue_fetch_executor,
                     self._fetch_from_queue,
@@ -323,7 +333,7 @@ class Flow:
 
         If at least one process is not alive, it stops Flow.
         """
-        while True:
+        while self.state != FlowState.STOPPED:
             for handler, context in self._contexts.items():
                 for proc in context.processes:
                     if not proc.is_alive():

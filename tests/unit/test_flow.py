@@ -1,7 +1,9 @@
 import asyncio
 import os
+import queue
 import time
 from typing import List
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -216,6 +218,13 @@ class TestFlow:
         assert f'[{slow_sleep_handlers[1].__class__.__name__}] Task expired. Skip' in log_str
         # doesn't arrive in the third handler
         assert f'[{slow_sleep_handlers[2].__class__.__name__}] Have message' not in log_str
+
+    async def test_enqueue_timeout(self, sleep_handlers, simple_flow, task):
+        timeouts = [handler._handler_sec for handler in sleep_handlers]
+        with patch.object(simple_flow._queues[0], 'put', MagicMock(side_effect=queue.Full)):
+            with pytest.raises(FlowError, match='timeout'):
+                await simple_flow.process(task, timeout_sec=1)
+            await asyncio.sleep(sum(timeouts))
 
     async def test_process_not_running_flow(self, simple_flow, task):
         await simple_flow.stop(graceful=False)
