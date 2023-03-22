@@ -104,7 +104,7 @@ class Flow:
             metrics_collector = Collector(collectible_metrics=[])
         self._metrics_manager = get_metrics_manager(metrics_collector, metrics_exporter)
 
-        self._state: FlowState = None  # noqa
+        self._state: FlowState = FlowState.STOPPED
         self._tasks: List[asyncio.Future] = []
 
     @property

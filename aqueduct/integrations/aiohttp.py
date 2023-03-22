@@ -46,7 +46,6 @@ async def stop_flows(app):
 
 
 def get_start_timeout() -> Optional[float]:
-    start_timeout = FLOW_START_TIMEOUT_DEFAULT
     try:
         start_timeout = float(os.environ.get(
             FLOW_START_TIMEOUT_NAME,
@@ -82,6 +81,6 @@ class AppIntegrator:
         if flow_name in self._app:
             raise RuntimeError(f'Flow with name "{flow_name}" already exists in app')
         if with_start:
-            flow.start(get_start_timeout())
+            flow.start(timeout=get_start_timeout())
         self._app[AQUEDUCT_FLOW_NAMES].append(flow_name)
         self._app[flow_name] = flow
