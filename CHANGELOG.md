@@ -1,3 +1,8 @@
+# 1.10.13
+- Default start timeout in aiohttp integration
+- Check timeout when try to put value to queue
+- Fix deadlock on exit when input queue has items
+
 # 1.10.12
 - Add a new async method share_value_with_data to the BaseTask class
 

@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import queue
 import sys
+from threading import BrokenBarrierError
 from typing import Callable, Iterator, List, Optional
 
 from .handler import BaseTaskHandler
@@ -203,7 +204,11 @@ class Worker:
         log.info(f'[Worker] initialising handler {self.name}')
         self._start()
         log.info(f'[Worker] handler {self.name} ok, waiting for others to start')
-        start_barrier.wait()
+
+        try:
+            start_barrier.wait()
+        except BrokenBarrierError:
+            raise TimeoutError('Starting timeout expired')
 
         log.info(f'[Worker] handler {self.name} ok, starting loop')
 
