@@ -7,6 +7,7 @@ import pytest
 
 from aqueduct import BaseTask, BaseTaskHandler
 from aqueduct.worker import Worker
+from aqueduct.queues import FlowStepQueue
 
 
 class FakeTaskHandler(BaseTaskHandler):
@@ -49,11 +50,13 @@ def worker():
     def init(batch_size, batch_timeout) -> Tuple[Worker, multiprocessing.Queue]:
         iq = multiprocessing.Queue(10000)
         oq = multiprocessing.Queue(10000)
+        queues = [
+            FlowStepQueue(iq, lambda _: True),
+            FlowStepQueue(oq, lambda _: True),
+        ]
         worker = Worker(
-            queue_in=iq,
-            queue_out=oq,
+            queues=queues,
             task_handler=FakeTaskHandler(),
-            handle_condition=lambda _: True,
             batch_size=batch_size,
             batch_timeout=batch_timeout,
             batch_lock=None,

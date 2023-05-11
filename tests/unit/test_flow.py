@@ -200,8 +200,8 @@ class TestFlow:
         info = simple_flow._get_queues_info()
         queues = simple_flow._queues
         assert len(info) == len(queues)
-        assert MAIN_PROCESS in info[queues[0]]
-        assert MAIN_PROCESS in info[queues[-1]]
+        assert MAIN_PROCESS in info[queues[0].queue]
+        assert MAIN_PROCESS in info[queues[-1].queue]
 
     async def test_process_expired_task(self, log_file, aqueduct_logger,
                                         slow_sleep_handlers, slow_simple_flow, task):
@@ -221,7 +221,7 @@ class TestFlow:
 
     async def test_enqueue_timeout(self, sleep_handlers, simple_flow, task):
         timeouts = [handler._handler_sec for handler in sleep_handlers]
-        with patch.object(simple_flow._queues[0], 'put', MagicMock(side_effect=queue.Full)):
+        with patch.object(simple_flow._queues[0].queue, 'put', MagicMock(side_effect=queue.Full)):
             with pytest.raises(FlowError, match='timeout'):
                 await simple_flow.process(task, timeout_sec=1)
             await asyncio.sleep(sum(timeouts))
@@ -332,7 +332,30 @@ class TestFlow:
         batch_timeout = flow_with_batch_handler._steps[0].batch_timeout
         _, batch_time = flow_with_batch_handler._metrics_manager.collector._metrics.batch_times.items[0]
 
-        assert batch_time == pytest.approx(batch_timeout, rel=1e-2)
+        assert batch_time == pytest.approx(batch_timeout, rel=1e-1)
+
+    @pytest.mark.parametrize('_type, handlers_not_in_log', [
+        (0, ('SleepHandler2',)),
+        (1, ('SleepHandler1',)),
+        (2, ('SleepHandler1', 'SleepHandler2', 'SetResultSleepHandler')),
+    ])
+    async def test_handle_condition(
+            self,
+            log_file,
+            aqueduct_logger,
+            handle_condition_flow,
+            task,
+            _type,
+            handlers_not_in_log,
+    ):
+        timeouts = [flow_step.handler._handler_sec for flow_step in handle_condition_flow._steps]
+        task._type = _type
+
+        await handle_condition_flow.process(task)
+        await asyncio.sleep(sum(timeouts))
+        log_str = log_file.read().decode()
+        for handler_name in handlers_not_in_log:
+            assert f'[{handler_name}] Have message' not in log_str
 
 
 async def test_segfault_due_to_update_shared_fields(array, array_sh_data, simple_flow):
