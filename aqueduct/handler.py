@@ -1,4 +1,8 @@
+from typing import Callable
 from .task import BaseTask
+
+
+HandleConditionType = Callable[[BaseTask], bool]
 
 
 class BaseTaskHandler:

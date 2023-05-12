@@ -14,7 +14,7 @@ from typing import Tuple
 import numpy as np
 import pytest
 
-from aqueduct.flow import Flow
+from aqueduct.flow import Flow, FlowStep
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.logger import LOGGER_NAME
 from aqueduct.multiprocessing import ProcessContext
@@ -194,4 +194,24 @@ async def simple_flow(loop, sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
 @pytest.fixture
 async def slow_simple_flow(loop, slow_sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
     async with run_flow(Flow(*slow_sleep_handlers)) as flow:
+        yield flow
+
+
+@pytest.fixture
+async def handle_condition_flow(loop) -> Flow:
+    steps = (
+        FlowStep(
+            SleepHandler1(0.001),
+            handle_condition=lambda task: task._type == 0
+        ),
+        FlowStep(
+            SleepHandler2(0.001),
+            handle_condition=lambda task: task._type == 1
+        ),
+        FlowStep(
+            SetResultSleepHandler(0.001),
+            handle_condition=lambda task: task._type in [0, 1]
+        ),
+    )
+    async with run_flow(Flow(*steps)) as flow:
         yield flow

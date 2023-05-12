@@ -1,3 +1,6 @@
+# 1.10.14
+- Route task to a specific worker queue according to handle_condition
+
 # 1.10.13
 - Default start timeout in aiohttp integration
 - Check timeout when try to put value to queue

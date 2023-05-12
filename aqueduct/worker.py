@@ -2,7 +2,7 @@ import multiprocessing as mp
 import queue
 import sys
 from threading import BrokenBarrierError
-from typing import Callable, Iterator, List, Optional
+from typing import Iterator, List, Optional
 
 from .handler import BaseTaskHandler
 from .logger import log
@@ -10,6 +10,7 @@ from .metrics.timer import (
     Timer,
     timeit,
 )
+from .queues import FlowStepQueue, select_next_queue
 from .task import BaseTask, StopTask
 
 MAX_SPIN_ITERATIONS=1000
@@ -24,25 +25,23 @@ class Worker:
 
     def __init__(
             self,
-            queue_in: mp.Queue,
-            queue_out: mp.Queue,
+            queues: List[FlowStepQueue],
             task_handler: BaseTaskHandler,
-            handle_condition: Callable[[BaseTask], bool],
             batch_size: int,
             batch_timeout: float,
             batch_lock: Optional[mp.RLock],
             step_number: int,
     ):
-        self.queue_in = queue_in
-        self.queue_out = queue_out
+        self._queues = queues
+        self.queue_in = queues[step_number - 1].queue
         self.task_handler = task_handler
-        self.handle_condition = handle_condition
         self.name = task_handler.__class__.__name__
         self.step_name = self.task_handler.get_step_name(step_number)
         self._batch_size = batch_size
         self._batch_timeout = batch_timeout
         self._batch_lock = batch_lock
         self._stop_task: BaseTask = None  # noqa
+        self._step_number = step_number
 
     def _start(self):
         """Runs something huge (e.g. model) in child process."""
@@ -91,11 +90,6 @@ class Worker:
         # don't pass an expired task to the next steps
         if task.is_expired():
             log.debug(f'[{self.name}] Task expired. Skip: {task}')
-            return
-
-        # don't process unsuitable tasks
-        if not self.handle_condition(task):
-            self._post_handle(task)
             return
 
         return task
@@ -194,7 +188,12 @@ class Worker:
 
     def _post_handle(self, task: BaseTask):
         task.metrics.start_transfer_timer(self.step_name)
-        self.queue_out.put(task)
+        queue_out = select_next_queue(
+            queues=self._queues,
+            task=task,
+            start_index=self._step_number,
+        )
+        queue_out.put(task)
 
     def loop(self, pid: int, start_barrier: mp.Barrier):
         """Main worker loop.
@@ -221,4 +220,4 @@ class Worker:
                 self._post_handle(task)
 
         if self._stop_task:
-            self.queue_out.put(self._stop_task)
+            self._queues[self._step_number].queue.put(self._stop_task)
