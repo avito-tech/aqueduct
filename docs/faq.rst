@@ -33,6 +33,16 @@ Because of speed. We use aqueduct when we need both speed of inference and hardw
 queue making inference very slow. Also, it is bad pattern when you send big objects with messaging brokers.
 
 
+Does it make sense in FlowStep, in which subscription model on gpu do nprocs > 1?
+--------------------------------------------
+It is technically possible to do this, but it really makes no sense.
+Step with GPU is usually a heavy model and should be scaled along with the harness. As a result, such an increase will
+significantly increase the consumption of memory and cores for the instance. It is better to do such scaling through
+the number of service pods if you have kubernetes or in the general case through the number of instances, and not
+through the number of processes per step with the model. So you will not grow the size of the pod and it will be
+easier to deploy.
+
+
 What happens if one of subprocesses is dead?
 --------------------------------------------
 
