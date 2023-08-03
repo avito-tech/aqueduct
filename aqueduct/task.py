@@ -1,19 +1,24 @@
 import uuid
 from time import monotonic
-from typing import Sequence, Set, Union
+from typing import Sequence, Set, Union, Optional
 
 from .metrics.task import TaskMetrics
 from .shm import SharedFieldsMixin
 
 
+DEFAULT_PRIORITY = 0
+
+
 class BaseTask(SharedFieldsMixin):
     task_id: Union[str, Sequence[str]] = ''
-    expiration_time = None
-    metrics: TaskMetrics = None
+    priority: int = DEFAULT_PRIORITY
+    expiration_time: Optional[float] = None
+    metrics: Optional[TaskMetrics] = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.task_id = str(uuid.uuid4())
+        self.priority = DEFAULT_PRIORITY
         self.metrics = TaskMetrics()
 
     def __repr__(self):
@@ -27,8 +32,11 @@ class BaseTask(SharedFieldsMixin):
     def set_timeout(self, timeout_sec: float):
         self.expiration_time = monotonic() + timeout_sec
 
+    def set_priority(self, priority: int):
+        self.priority = priority
+
     def is_expired(self) -> bool:
-        return monotonic() >= self.expiration_time
+        return self.expiration_time is not None and monotonic() >= self.expiration_time
 
     def _update_shared_fields(self, source_task: 'BaseTask') -> Set[str]:
         """Updates task shared fields and returns shared fields names.

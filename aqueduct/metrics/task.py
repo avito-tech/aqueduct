@@ -32,11 +32,19 @@ class TaskMetrics(TasksMetricsStorage):
         self._transfer_timer = TransferTimer(transfer_from)
         self._transfer_timer.start()
 
-    def stop_transfer_timer(self, transfer_to: str):
+    def stop_transfer_timer(self, transfer_to: str, priority: int = 0):
         self._transfer_timer.stop()
         from_ = self._transfer_timer.transfer_from
-        self.transfer_times.add(f'from_{from_}_to_{transfer_to}', self._transfer_timer.seconds)
+        name = (
+            f'p_{priority}_from_{from_}_to_{transfer_to}'
+            if priority > 0 else f'from_{from_}_to_{transfer_to}'
+        )
+        self.transfer_times.add(name, self._transfer_timer.seconds)
 
-    def save_task_size(self, task_size: int, transfer_to: str):
+    def save_task_size(self, task_size: int, transfer_to: str, priority: int = 0):
         from_ = self._transfer_timer.transfer_from
-        self.task_sizes.add(f'from_{from_}_to_{transfer_to}', task_size)
+        name = (
+            f'p_{priority}_from_{from_}_to_{transfer_to}'
+            if priority > 0 else f'from_{from_}_to_{transfer_to}'
+        )
+        self.task_sizes.add(name, task_size)

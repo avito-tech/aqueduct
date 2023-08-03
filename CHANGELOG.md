@@ -1,3 +1,6 @@
+# 1.10.15
+- Add Priority queues
+
 # 1.10.14
 - Route task to a specific worker queue according to handle_condition
 

@@ -2,6 +2,7 @@ import multiprocessing as mp
 import queue
 import sys
 from threading import BrokenBarrierError
+from time import monotonic
 from typing import Iterator, List, Optional
 
 from .handler import BaseTaskHandler
@@ -11,7 +12,7 @@ from .metrics.timer import (
     timeit,
 )
 from .queues import FlowStepQueue, select_next_queue
-from .task import BaseTask, StopTask
+from .task import BaseTask, DEFAULT_PRIORITY, StopTask
 
 MAX_SPIN_ITERATIONS=1000
 
@@ -30,10 +31,11 @@ class Worker:
             batch_size: int,
             batch_timeout: float,
             batch_lock: Optional[mp.RLock],
+            read_lock: mp.RLock,
             step_number: int,
     ):
         self._queues = queues
-        self.queue_in = queues[step_number - 1].queue
+        self._queue_priorities = len(self._queues)
         self.task_handler = task_handler
         self.name = task_handler.__class__.__name__
         self.step_name = self.task_handler.get_step_name(step_number)
@@ -41,37 +43,77 @@ class Worker:
         self._batch_timeout = batch_timeout
         self._batch_lock = batch_lock
         self._stop_task: BaseTask = None  # noqa
+        self._read_lock = read_lock
         self._step_number = step_number
+        self._read_queues = [
+            self._queues[priority][self._step_number - 1].queue
+            for priority in reversed(range(self._queue_priorities))
+        ]
 
     def _start(self):
         """Runs something huge (e.g. model) in child process."""
         self.task_handler.on_start()
 
-    def _wait_task(self, timeout: float) -> Optional[BaseTask]:
-        task = None
+    def _wait_task_no_timeout(self) -> Optional[BaseTask]:
         # There is a problem with Python MP Queue implementation.
         # queue.get() can raise Empty exception even thou queue is in fact not empty.
         # For example, if we have 10 tasks in a queue, we expect batch size to be 10, but it is not always true, because
         #  after reading, say, 5 tasks, Python queue can tell as that there is nothing left, which is in fact false.
         # In our implementation we use an additional spin over a queue to guarantee consistent results.
         # More info: https://bugs.python.org/issue23582
+        task: Optional[BaseTask] = None
         i = 0
-        while not task and i < MAX_SPIN_ITERATIONS:
-            # Limit our spin with maximum of MAX_SPIN_ITERATIONS just in case.
-            # We do not want long, purposeless iteration
-            i += 1
+        if self._read_lock.acquire(block=False):
             try:
-                if timeout == 0:
-                    task = self.queue_in.get(block=False)
-                else:
-                    task = self.queue_in.get(timeout=timeout)
-            except queue.Empty:
-                # additionaly check queue size to make sure that there is in fact no tasks there.
-                # if size > 0 then Empty exception was fake -> we should try to call get() again
-                # since macos does not support qsize method - ignore that check
-                # (it would be greate to make a proper queue later)
-                if sys.platform == 'darwin' or self.queue_in.qsize() == 0:
-                    break
+                while not task and i < MAX_SPIN_ITERATIONS:
+                    # Limit our spin with maximum of MAX_SPIN_ITERATIONS just in case.
+                    # We do not want long, purposeless iteration
+                    i += 1
+
+                    for queue_in in self._read_queues:
+                        try:
+                            task = queue_in.get(block=False)
+                        except queue.Empty:
+                            continue
+                        else:
+                            task_size = getattr(queue_in, 'task_size', None)
+                            if task_size and not isinstance(task, StopTask):
+                                task.metrics.save_task_size(task_size, self.step_name, task.priority)
+                            break
+
+                    if task is None:
+                        # additionally check queue size to make sure that there is in fact no tasks there.
+                        # if size > 0 then Empty exception was fake -> we should try to call get() again
+                        # since macos does not support qsize method - ignore that check
+                        # (it would be great to make a proper queue later)
+                        if sys.platform == 'darwin' or all(queue_in.qsize() == 0 for queue_in in self._read_queues):
+                            break
+            finally:
+                self._read_lock.release()
+        return task
+
+    def _wait_task_with_timeout(self, timeout: float) -> Optional[BaseTask]:
+        task: Optional[BaseTask] = None
+        deadline = monotonic() + timeout
+        if self._read_lock.acquire(block=True, timeout=timeout):
+            try:
+                remaining_timeout = deadline - monotonic()
+                if remaining_timeout > 0:
+                    mp.connection.wait(
+                        [queue._reader for queue in self._read_queues],
+                        timeout=remaining_timeout,
+                    )
+                task = self._wait_task_no_timeout()
+            finally:
+                self._read_lock.release()
+        return task
+
+    def _wait_task(self, timeout: float) -> Optional[BaseTask]:
+        task: Optional[BaseTask] = None
+        if timeout == 0:
+            task = self._wait_task_no_timeout()
+        else:
+            task = self._wait_task_with_timeout(timeout)
 
         if not task:
             return
@@ -82,10 +124,7 @@ class Worker:
 
         log.debug(f'[{self.name}] Have message')
 
-        task.metrics.stop_transfer_timer(self.step_name)
-        task_size = getattr(self.queue_in, 'task_size', None)
-        if task_size:
-            task.metrics.save_task_size(task_size, self.step_name)
+        task.metrics.stop_transfer_timer(self.step_name, task.priority)
 
         # don't pass an expired task to the next steps
         if task.is_expired():
@@ -118,14 +157,14 @@ class Worker:
             # timeout should not be less then 1ms, to avoid unnecessary short sleeps
             timeout = max(timeout, 0.001)
 
-    def _get_batch_dynamic(self, batch):
+    def _get_batch_dynamic(self, batch: List[BaseTask]) -> List[BaseTask]:
         """ Collecting incoming tasks into batch.
         This method will not be waiting for batch_timeout to collect full batch,
         we just simply get all tasks that are currently in the queue and making batch only from them.
         """
         while True:
             task = None
-            task = self._wait_task(timeout=0.)
+            task = self._wait_task(timeout=0.0)
 
             if task:
                 batch.append(task)
@@ -144,7 +183,7 @@ class Worker:
         while True:
             # wait for some long amount of time (10 secs), and wait again,
             # until we eventually get a task
-            task = self._wait_task(10.)
+            task = self._wait_task(10.0)
             if task:
                 batch.append(task)
                 timer.start()
@@ -220,4 +259,4 @@ class Worker:
                 self._post_handle(task)
 
         if self._stop_task:
-            self._queues[self._step_number].queue.put(self._stop_task)
+            self._queues[DEFAULT_PRIORITY][self._step_number].queue.put(self._stop_task)

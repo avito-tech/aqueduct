@@ -19,7 +19,7 @@ from aqueduct.flow import (
 )
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.metrics import MAIN_PROCESS
-from aqueduct.task import BaseTask
+from aqueduct.task import BaseTask, DEFAULT_PRIORITY
 from tests.unit.conftest import (
     Task,
     run_flow,
@@ -199,9 +199,9 @@ class TestFlow:
     def test_get_queues_info(self, simple_flow: Flow):
         info = simple_flow._get_queues_info()
         queues = simple_flow._queues
-        assert len(info) == len(queues)
-        assert MAIN_PROCESS in info[queues[0].queue]
-        assert MAIN_PROCESS in info[queues[-1].queue]
+        assert len(info) == len(queues[DEFAULT_PRIORITY])
+        assert MAIN_PROCESS in info[queues[DEFAULT_PRIORITY][0].queue]
+        assert MAIN_PROCESS in info[queues[DEFAULT_PRIORITY][-1].queue]
 
     async def test_process_expired_task(self, log_file, aqueduct_logger,
                                         slow_sleep_handlers, slow_simple_flow, task):
@@ -221,7 +221,7 @@ class TestFlow:
 
     async def test_enqueue_timeout(self, sleep_handlers, simple_flow, task):
         timeouts = [handler._handler_sec for handler in sleep_handlers]
-        with patch.object(simple_flow._queues[0].queue, 'put', MagicMock(side_effect=queue.Full)):
+        with patch.object(simple_flow._queues[DEFAULT_PRIORITY][0].queue, 'put', MagicMock(side_effect=queue.Full)):
             with pytest.raises(FlowError, match='timeout'):
                 await simple_flow.process(task, timeout_sec=1)
             await asyncio.sleep(sum(timeouts))
@@ -230,6 +230,29 @@ class TestFlow:
         await simple_flow.stop(graceful=False)
         with pytest.raises(NotRunningError):
             await simple_flow.process(task)
+
+    @pytest.mark.parametrize('priority, expected', [
+        (0, ['normal task', 'normal task', 'normal task', 'priority task']),
+        (1, ['normal task', 'priority task', 'normal task', 'normal task']),
+    ])
+    async def test_priority_queue_flow(self, slow_priority_queue_flow, priority, expected):
+        results = []
+        futures = []
+        for _ in range(3):
+            task = Task()
+            future = asyncio.ensure_future(slow_priority_queue_flow.process(task))
+            future.add_done_callback(lambda _: results.append('normal task'))
+            futures.append(future)
+            await asyncio.sleep(0)
+        task = Task()
+        task.set_priority(priority)
+        future = asyncio.ensure_future(slow_priority_queue_flow.process(task))
+        future.add_done_callback(lambda _: results.append('priority task'))
+        futures.append(future)
+
+        await asyncio.gather(*futures)
+
+        assert results == expected
 
     async def test_process_huge_count_of_tasks(self, simple_flow):
         """Count of tasks much more than queue size."""
