@@ -27,6 +27,7 @@ Flow constructor arguments
 - ``metrics_exporter`` - class that allows to export `metrics <metrics.rst>`_
 - ``queue_size`` - the size of queues between ``FlowSteps``. If ``queue_size`` is not specified, then aqueduct calculates the queue size for each step depending on the step's batch size, but minimal 20 tasks
 - ``mp_start_method`` - Start method for `process creation <https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods>`_ (``spawn``, ``fork``, ``forkserver``)
+- ``queue_priorities`` - number of priority queues. Default is 1. `More about priority queues <priority_queues.rst>`_
 
 Flow main methods
 =================

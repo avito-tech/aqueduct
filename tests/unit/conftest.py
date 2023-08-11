@@ -177,6 +177,14 @@ def slow_sleep_handlers() -> Tuple[SleepHandler, ...]:
         SetResultSleepHandler(0.2),
     )
 
+@pytest.fixture
+def slow_priority_queue_handlers() -> Tuple[SleepHandler, ...]:
+    return (
+        SleepHandler1(0.1),
+        SleepHandler2(0.1),
+        SetResultSleepHandler(0.1),
+    )
+
 
 @asynccontextmanager
 async def run_flow(flow: Flow):
@@ -194,6 +202,11 @@ async def simple_flow(loop, sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
 @pytest.fixture
 async def slow_simple_flow(loop, slow_sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
     async with run_flow(Flow(*slow_sleep_handlers)) as flow:
+        yield flow
+
+@pytest.fixture
+async def slow_priority_queue_flow(loop, slow_priority_queue_handlers: Tuple[SleepHandler, ...]) -> Flow:
+    async with run_flow(Flow(*slow_priority_queue_handlers, queue_priorities=2)) as flow:
         yield flow
 
 

@@ -13,8 +13,8 @@ class FlowStepQueue:
     handle_condition: HandleConditionType
 
 
-def select_next_queue(queues: List[FlowStepQueue], task: BaseTask, start_index: int = 0) -> mp.Queue:
-    for step_queue in queues[start_index:]:
+def select_next_queue(queues: List[List[FlowStepQueue]], task: BaseTask, start_index: int = 0) -> mp.Queue:
+    for step_queue in queues[task.priority][start_index:]:
         if step_queue.handle_condition(task):
             return step_queue.queue
-    return queues[-1].queue
+    return queues[task.priority][-1].queue
