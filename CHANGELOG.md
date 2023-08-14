@@ -1,3 +1,6 @@
+# 1.11.1
+- Fix potential normal-queue starvation
+
 # 1.11.0
 - Add Priority queues
 
