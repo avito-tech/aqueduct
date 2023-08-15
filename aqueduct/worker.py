@@ -1,9 +1,10 @@
 import multiprocessing as mp
 import queue
 import sys
+from collections import deque
 from threading import BrokenBarrierError
 from time import monotonic
-from typing import Iterator, List, Optional
+from typing import Deque, Iterator, List, Optional
 
 from .handler import BaseTaskHandler
 from .logger import log
@@ -45,6 +46,7 @@ class Worker:
         self._stop_task: BaseTask = None  # noqa
         self._read_lock = read_lock
         self._step_number = step_number
+        self._pending_tasks: Deque[BaseTask] = deque()
         self._read_queues = [
             self._queues[priority][self._step_number - 1].queue
             for priority in reversed(range(self._queue_priorities))
@@ -54,18 +56,18 @@ class Worker:
         """Runs something huge (e.g. model) in child process."""
         self.task_handler.on_start()
 
-    def _wait_task_no_timeout(self) -> Optional[BaseTask]:
+    def _wait_tasks_no_timeout(self) -> List[BaseTask]:
         # There is a problem with Python MP Queue implementation.
         # queue.get() can raise Empty exception even thou queue is in fact not empty.
         # For example, if we have 10 tasks in a queue, we expect batch size to be 10, but it is not always true, because
         #  after reading, say, 5 tasks, Python queue can tell as that there is nothing left, which is in fact false.
         # In our implementation we use an additional spin over a queue to guarantee consistent results.
         # More info: https://bugs.python.org/issue23582
-        task: Optional[BaseTask] = None
         i = 0
+        tasks: List[BaseTask] = []
         if self._read_lock.acquire(block=False):
             try:
-                while not task and i < MAX_SPIN_ITERATIONS:
+                while not tasks and i < MAX_SPIN_ITERATIONS:
                     # Limit our spin with maximum of MAX_SPIN_ITERATIONS just in case.
                     # We do not want long, purposeless iteration
                     i += 1
@@ -79,9 +81,9 @@ class Worker:
                             task_size = getattr(queue_in, 'task_size', None)
                             if task_size and not isinstance(task, StopTask):
                                 task.metrics.save_task_size(task_size, self.step_name, task.priority)
-                            break
+                            tasks.append(task)
 
-                    if task is None:
+                    if not tasks:
                         # additionally check queue size to make sure that there is in fact no tasks there.
                         # if size > 0 then Empty exception was fake -> we should try to call get() again
                         # since macos does not support qsize method - ignore that check
@@ -90,10 +92,10 @@ class Worker:
                             break
             finally:
                 self._read_lock.release()
-        return task
+        return tasks
 
-    def _wait_task_with_timeout(self, timeout: float) -> Optional[BaseTask]:
-        task: Optional[BaseTask] = None
+    def _wait_tasks_with_timeout(self, timeout: float) -> List[BaseTask]:
+        tasks: List[BaseTask] = []
         deadline = monotonic() + timeout
         if self._read_lock.acquire(block=True, timeout=timeout):
             try:
@@ -103,17 +105,21 @@ class Worker:
                         [queue._reader for queue in self._read_queues],
                         timeout=remaining_timeout,
                     )
-                task = self._wait_task_no_timeout()
+                tasks = self._wait_tasks_no_timeout()
             finally:
                 self._read_lock.release()
-        return task
+        return tasks
 
     def _wait_task(self, timeout: float) -> Optional[BaseTask]:
+        if not self._pending_tasks:
+            if timeout == 0:
+                self._pending_tasks.extend(self._wait_tasks_no_timeout())
+            else:
+                self._pending_tasks.extend(self._wait_tasks_with_timeout(timeout))
+
         task: Optional[BaseTask] = None
-        if timeout == 0:
-            task = self._wait_task_no_timeout()
-        else:
-            task = self._wait_task_with_timeout(timeout)
+        if self._pending_tasks:
+            task = self._pending_tasks.popleft()
 
         if not task:
             return
