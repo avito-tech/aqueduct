@@ -3,10 +3,18 @@ from setuptools import find_packages, setup
 with open('README.rst') as f:
     long_description = f.read()
 
-with open('requirements/dev.txt') as f:
-    required = f.read().splitlines()
-
 packages = ['aqueduct']
+
+required = [
+    'numpy',
+    'cffi==1.15.0',
+]
+
+extras = {
+    'aiohttp': [
+        'aiohttp',
+    ]
+}
 
 setup(
     name='aqueduct',
@@ -41,4 +49,5 @@ setup(
     ],
     setup_requires=required,
     install_requires=required,
+    extras_require=extras,
 )

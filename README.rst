@@ -29,7 +29,7 @@ Documentation
 Examples
 ========
 
-- `Aiohttp <examples/aiohttp/>`_
+- `Aiohttp <examples/aiohttp/>`_ (with extras `aiohttp`)
 - `Flask <examples/flask/>`_
 
 Contact Us
