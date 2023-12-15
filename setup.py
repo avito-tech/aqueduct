@@ -6,13 +6,15 @@ with open('README.rst') as f:
 packages = ['aqueduct']
 
 required = [
-    'numpy',
     'cffi==1.15.0',
 ]
 
 extras = {
     'aiohttp': [
         'aiohttp',
+    ],
+    'numpy': [
+        'numpy'
     ]
 }
 

@@ -18,7 +18,7 @@ from aqueduct.flow import Flow, FlowStep
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.logger import LOGGER_NAME
 from aqueduct.multiprocessing import ProcessContext
-from aqueduct.shm import NPArraySharedData
+from aqueduct.shm.numpy import NPArraySharedData
 from aqueduct.task import BaseTask
 
 
