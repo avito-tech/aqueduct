@@ -1,3 +1,6 @@
+# Unreleased
+- Fix setup requirements
+
 # 1.11.0
 - Add Priority queues
 
