@@ -3,6 +3,9 @@ from setuptools import find_packages, setup
 with open('README.rst') as f:
     long_description = f.read()
 
+with open('requirements/dev.txt') as f:
+    required = f.read().splitlines()
+
 packages = ['aqueduct']
 
 setup(
@@ -36,6 +39,6 @@ setup(
         'Operating System :: Unix',
         'Operating System :: OS Independent',
     ],
-    setup_requires=['cffi==1.15.0'],
-    install_requires=['cffi==1.15.0'],
+    setup_requires=required,
+    install_requires=required,
 )
