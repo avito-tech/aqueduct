@@ -12,6 +12,21 @@ Key Benefits
 - All optimizations in one library
 
 
+Quickstart
+=============
+
+Install using ``pip``:
+
+.. code-block:: shell
+
+    pip install aqueduct
+
+Moreover, aqueduct has "optional extras"
+
+- ``numpy`` - support types from numpy in shared memory
+- ``aiohttp`` - extension for aiohttp support(see more in examples)
+
+
 Documentation
 =============
 
@@ -29,7 +44,7 @@ Documentation
 Examples
 ========
 
-- `Aiohttp <examples/aiohttp/>`_ (with extras `aiohttp`)
+- `Aiohttp <examples/aiohttp/>`_
 - `Flask <examples/flask/>`_
 
 Contact Us
