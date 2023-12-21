@@ -1,3 +1,6 @@
+# 1.11.1
+- Update setup requirements: add extras - aiohttp, numpy
+
 # 1.11.0
 - Add Priority queues
 

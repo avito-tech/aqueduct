@@ -5,6 +5,19 @@ with open('README.rst') as f:
 
 packages = ['aqueduct']
 
+required = [
+    'cffi==1.15.0',
+]
+
+extras = {
+    'aiohttp': [
+        'aiohttp',
+    ],
+    'numpy': [
+        'numpy'
+    ]
+}
+
 setup(
     name='aqueduct',
     packages=find_packages(),
@@ -36,6 +49,7 @@ setup(
         'Operating System :: Unix',
         'Operating System :: OS Independent',
     ],
-    setup_requires=['cffi==1.15.0'],
-    install_requires=['cffi==1.15.0'],
+    setup_requires=required,
+    install_requires=required,
+    extras_require=extras,
 )

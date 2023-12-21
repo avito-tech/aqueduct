@@ -7,10 +7,9 @@ from multiprocessing.shared_memory import SharedMemory
 import numpy as np
 import pytest
 
-from aqueduct.shm import (
-    AtomicCounter,
-    NPArraySharedData,
-)
+from aqueduct.shm.base import AtomicCounter
+from aqueduct.shm.numpy import NPArraySharedData
+
 from tests.unit.conftest import Task
 
 

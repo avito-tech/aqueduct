@@ -2,7 +2,7 @@ from typing import Dict
 from unittest.mock import Mock
 
 from tests.unit.conftest import Task
-from aqueduct.shm import SharedData, SharedMemoryWrapper
+from aqueduct.shm.base import SharedData, SharedMemoryWrapper
 from aqueduct.task import BaseTask
 
 
