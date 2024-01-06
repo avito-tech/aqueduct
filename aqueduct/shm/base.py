@@ -1,15 +1,15 @@
-"""Предоставляет инструменты для управления данными в разделяемой памяти.
+"""Provides tools for managing data in shared memory.
 
-В shared_memory есть особенность - даже после close() в другом процессе, где была прилинкована память,
-при выходе из процесса вызывается unlink(). Как следствие - этот кусок памяти не может быть больше
-нигде использован, т.к. возвращен ОС. Причина - в resource_tracker'е, который для каждого не дочернего
-процесса - отдельный.
+There is a feature in shared_memory - even after close() in another process
+where memory was linked, unlink() is called when exiting the process.
+As a result, this piece of memory cannot be used anywhere else, because it was returned to the OS.
+The reason is in the resource_tracker, which is separate for each non-child process.
 
-Обойти эту особенность можно, явно исключив из наблюдения трекера, кусок памяти:
-from multiprocessing.resource_tracker import unregister
-unregister(f'/{shm.name}', 'shared_memory')
+You can bypass this feature by explicitly excluding a piece of memory from the tracker's observation:
+    from multiprocessing.resource_tracker import unregister
+    unregister(f'/{shm.name}', 'shared_memory')
 
-Также этой проблемы нет, если процесс, использующий память, дочерний (т.к. там тот же самый трекер ресурсов)
+Also, this problem does not exist if the process using memory is a child (because there is the same resource tracker)
 https://bugs.python.org/issue39959
 """
 
@@ -125,16 +125,16 @@ class SharedMemoryWrapper:
 
 
 class SharedData(ABC):
-    """Управляет данными в разделяемой памяти."""
+    """Manages data in shared memory."""
 
     def __init__(self, shm_wrapper: SharedMemoryWrapper):
         self.shm_wrapper = shm_wrapper
 
     @abstractmethod
     def get_data(self) -> Any:
-        """Возвращает ссылку на данные, лежащие в разделяемой памяти."""
+        """Returns a ref to the data in shared memory."""
 
     @classmethod
     @abstractmethod
     def create_from_data(cls, data: Any) -> 'SharedData':
-        """Копирует данные в разделяемую память и возвращает экземпляр класса."""
+        """Copies the data to shared memory and returns an instance of the class."""
