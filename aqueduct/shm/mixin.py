@@ -17,7 +17,7 @@ class HasReadany(Protocol):
 
 
 class SharedFieldsMixin:
-    """Позволяет заменить значение поля экземпляра класса на его копию в разделяемой памяти."""
+    """Allows you to replace the value of a class instance field with its copy in shared memory."""
 
     def __init__(self, *args, **kwargs):
         self._shared_fields: Dict[str, SharedData] = {}
@@ -42,11 +42,11 @@ class SharedFieldsMixin:
         self._set_shared_value(field_name, shared_value)
 
     def share_value(self, field_name: str):
-        """Заменяет значение поля на его копию в разделяемой памяти.
-        Все последующие изменения значения будут производиться в разделяемой памяти, т.е. эти изменения
-        будут отражаться во всех объектах, которые ссылаются на эту же область памяти.
-        В случае замены значения необходимо заново вызвать данный метод, чтобы значение попало в
-        разделяемую память, при этом будет выделена новая область разделяемой памяти.
+        """Replaces the value of the field with its copy in shared memory.
+           All subsequent changes to the value will be made in shared memory, i.e. these changes
+           they will be reflected in all objects that refer to the same memory area.
+           If the value is replaced, this method must be called again so that the value gets into
+           shared memory, and a new area of shared memory will be allocated.
         """
         if field_name not in self.__dict__:
             raise ValueError('Unknown field name')

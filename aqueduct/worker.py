@@ -18,10 +18,9 @@ MAX_SPIN_ITERATIONS=1000
 
 
 class Worker:
-    """Обертка над классом BaseTaskHandler.
+    """Wrapper over the BaseTaskHandler class.
 
-    Достает из входной очереди задачу, пропускает ее через обработчика task_handler и кладет ее
-    в выходную очередь.
+    Takes a task from the input queue, passes it through task_handler and puts it in the output queue.
     """
 
     def __init__(

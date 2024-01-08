@@ -6,19 +6,19 @@ HandleConditionType = Callable[[BaseTask], bool]
 
 
 class BaseTaskHandler:
-    """Базовый класс для ваших хендлеров.
-       Используется для логики которой не требуется модель и специальная инициализация.
-       Если же нужна модель, которая долго стартует и занимает память, то используйте ModelTaskHandler()."""
+    """The base class for your handlers.
+       It is used for logic that does not require a model and special initialization.
+       If you need a model that starts for a long time and takes up memory, then use  ModelTaskHandler()."""
 
     @classmethod
     def get_step_name(cls, step_number: int) -> str:
         return f'step{step_number}_{cls.__name__}'
 
     def on_start(self):
-        """Вызывается при старте в дочернем процессе. Чтобы модель занимала память только в подпроцессе,
-        а не в родителе."""
+        """Called at startup in a child process.
+        So that the model takes up memory only in the subprocess, not in the parent."""
         pass
 
     def handle(self, *tasks: BaseTask):
-        """Вызывается при получении из очереди задания."""
+        """Called when a task is received from the queue."""
         raise NotImplementedError
