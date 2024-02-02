@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import queue
+import signal
 import sys
 from threading import BrokenBarrierError
 from time import monotonic
@@ -233,12 +234,22 @@ class Worker:
         )
         queue_out.put(task)
 
+    def _fix_signals(self):
+        """ Sometimes some web frameworks (e.g. unicorn) override signal handlers.
+        If processes use start method fork,
+        so when we call flow.stop() processes do not terminate and hang.
+        Here we restore the signals we need.
+        """
+        signal.signal(signal.SIGTERM, signal.Handlers.SIG_DFL)
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+
     def loop(self, pid: int, start_barrier: mp.Barrier):
         """Main worker loop.
 
         The code below is executed in a new process.
         """
         log.info(f'[Worker] initialising handler {self.name}')
+        self._fix_signals()
         self._start()
         log.info(f'[Worker] handler {self.name} ok, waiting for others to start')
 
