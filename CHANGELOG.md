@@ -1,3 +1,6 @@
+# 1.11.2
+- restore signals for successful termination of processes during flow.stop() if they were overridden
+
 # 1.11.1
 - Update setup requirements: add extras - aiohttp, numpy
 
