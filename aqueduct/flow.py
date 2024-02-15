@@ -5,6 +5,7 @@ import os
 import queue
 import signal
 import sys
+import psutil
 from enum import Enum
 from functools import cached_property
 from functools import reduce
@@ -35,6 +36,7 @@ from .multiprocessing import (
 from .queues import FlowStepQueue, select_next_queue
 from .task import BaseTask, DEFAULT_PRIORITY, StopTask
 from .worker import Worker
+from .metrics.base import MetricsItems
 
 # just for using common ResourceTracker in main and child processes and avoiding
 # unnecessary shared memory resource_tracker "No such file or directory" warnings
@@ -234,6 +236,17 @@ class Flow:
 
         # queue should be able to store at least 20 task, that's seems reasonable
         return max(step.batch_size*3, 20)
+    
+    def _get_flow_steps_memory_usage(self) -> MetricsItems:
+        metrics = MetricsItems()
+        for step_number, handler in enumerate(self._contexts):
+            flow_step_name = handler.get_step_name(step_number)
+            pids = self._contexts[handler].pids()
+            for pid in pids:
+                process = psutil.Process(pid)
+                memory = process.memory_info().rss
+                metrics.add(flow_step_name, memory)
+        return metrics
 
     def _run_steps(self, timeout: Optional[int]):
         if len(self._steps) == 0:
@@ -302,6 +315,7 @@ class Flow:
         self._tasks.append(asyncio.ensure_future(self._check_is_alive()))
 
         self._metrics_manager.start(queues_info=self._get_queues_info())
+        self._metrics_manager.collector.add_flow_steps_memory_usage(self._get_flow_steps_memory_usage())
 
     def _get_queues_info(self) -> Dict[mp.Queue, str]:
         """Returns queues between Step handlers and its names.
