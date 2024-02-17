@@ -17,6 +17,7 @@ Here is all metrics collected by aqueduct:
 * ``batch_size`` - Batch size. Useful when using dynamic batching (timing metric)
 * ``qsize`` - Queue size (timing metric)
 * ``tasks`` - Total task count (count metric)
+* ``memory_usage`` - Memory usage at each flow step (timing metric)
   
 
 Aqueduct supports StatsD metrics format via ``ToStatsDMetricsExporter`` class

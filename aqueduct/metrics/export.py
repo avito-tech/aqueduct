@@ -16,7 +16,7 @@ BATCH_TIME_PREFIX = 'batch_time'
 BATCH_SIZE_PREFIX = 'batch_size'
 QSIZE_PREFIX = 'qsize'
 TASKS_PREFIX = 'tasks'
-FLOW_STEP_MEMORY_USAGE_PREFIX = 'memory_usage'
+MEMORY_USAGE_PREFIX = 'memory_usage'
 
 
 class StatsDBuffer(Protocol):
@@ -72,8 +72,8 @@ class ToStatsDMetricsExporter(Exporter):
             if cnt > 0:
                 self.target.count(f'{self.prefix}.{TASKS_PREFIX}.{name}', cnt)
 
-        for name, memory_usage in metrics.flow_steps_memory_usage.items:
-            self.target.timing(f'{self.prefix}.{FLOW_STEP_MEMORY_USAGE_PREFIX}.{name}', memory_usage)
+        for name, memory_usage in metrics.memory_usage.items:
+            self.target.timing(f'{self.prefix}.{MEMORY_USAGE_PREFIX}.{name}', memory_usage)
 
 
 class DummyExporter(Exporter):

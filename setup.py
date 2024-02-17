@@ -7,6 +7,7 @@ packages = ['aqueduct']
 
 required = [
     'cffi==1.15.0',
+    'psutil==5.9.4',
 ]
 
 extras = {
