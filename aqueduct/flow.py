@@ -238,15 +238,26 @@ class Flow:
         return max(step.batch_size*3, 20)
     
     async def _get_memory_usage(self, sleep_sec: float = 1.):
+        handler_processes_dict = {}
+        for step_number, handler in enumerate(self._contexts):
+            flow_step_name = handler.get_step_name(step_number)
+            pids = self._contexts[handler].pids()
+            processes = []
+            for pid in pids:
+                process = psutil.Process(pid)
+                processes.append(process)
+            handler_processes_dict[flow_step_name] = processes
+
         while self.state != FlowState.STOPPED:
             metrics = MetricsItems()
-            for step_number, handler in enumerate(self._contexts):
-                flow_step_name = handler.get_step_name(step_number)
-                pids = self._contexts[handler].pids()
-                for pid in pids:
-                    process = psutil.Process(pid)
+            for flow_step_name, processes in handler_processes_dict.items():
+                nprocs_memory_sum = 0
+                for process in processes:
                     memory = process.memory_info().rss
+                    nprocs_memory_sum  += memory
                     metrics.add(flow_step_name, memory)
+                if len(processes) != 1:
+                    metrics.add(f'{flow_step_name}_nprocs_sum', nprocs_memory_sum)
             self._metrics_manager.collector.add_memory_usage(metrics)
             await asyncio.sleep(sleep_sec)
 
