@@ -7,6 +7,7 @@ packages = ['aqueduct']
 
 required = [
     'cffi==1.15.0',
+    'psutil==5.9.4',
 ]
 
 extras = {
@@ -21,7 +22,7 @@ extras = {
 setup(
     name='aqueduct',
     packages=find_packages(),
-    version='1.11.2',
+    version='1.11.3',
     license='MIT',
     license_files='LICENSE.txt',
     author='Data Science SWAT',
