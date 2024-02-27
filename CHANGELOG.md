@@ -1,3 +1,6 @@
+# 1.11.3
+- Add memory usage metrics
+
 # 1.11.2
 - restore signals for successful termination of processes during flow.stop() if they were overridden
 
