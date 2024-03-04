@@ -1,20 +1,15 @@
 Troubleshooting
 ===============
 
-Aqueduct in Kubernetes
+OOM in your model
 ==============================================
 
-If you encounter memory issues while using the Aqueduct tool in Kubernetes, such as OOM killer terminating processes within a pod, follow this troubleshooting guide.
+Models often consume a significant amount of memory, making processes that utilize them susceptible to OOM killer termination when there is insufficient RAM.
 
-1. **Problem Description:**
-   In the Kubernetes infrastructure, when node resources are insufficient, the OOM killer mechanism is triggered, which may terminate one of the child processes of Flow Aqueduct. This leads to an inconsistent state of the pod.
-
-2. **Symptoms of the Problem:**
-   Possible symptoms include:
-
-- Flow Aqueduct stopping with the message ``The process %s for %s handler is dead``.
-- Decrease in the consumption of RAM within the pod.
-- OOM killer activations visible in the kernel logs (dmesg) of the node. For example:
+This may manifest in less obvious ways, particularly when using Kubernetes. The following events may indicate OOM killer activation:
+  - Flow Aqueduct stopping with the message `The process %s for %s handler is dead`;
+  - Decrease in RAM consumption;
+  - OOM killer activations visible in the kernel logs (dmesg). For example:
 
 .. code-block:: bash
 
@@ -32,14 +27,21 @@ If you encounter memory issues while using the Aqueduct tool in Kubernetes, such
      [22484121.247007] oom_reaper: reaped process 10334 (python3), now anon-rss:0kB, file-rss:77084kB, shmem-rss:31044kB
      [22484121.308216] oom_reaper: reaped process 10335 (python3), now anon-rss:0kB, file-rss:77084kB, shmem-rss:35204kB
 
-3. **Solution - Kubernetes Update:**
+Kubernetes case:
+==============================================
+In the Kubernetes infrastructure, when node resources are insufficient,
+the OOM killer mechanism is triggered, which may terminate one of the processes than use models.
+This leads to an inconsistent state of the pod.
 
-   Ensure that your Kubernetes version is 1.28 or higher.
+Ensure that your Kubernetes version is 1.28 or higher.
 
-   Starting from version 1.28, Kubernetes supports the `memory.oom.group` https://github.com/torvalds/linux/blob/3c4aa44343777844e425c28f1427127f3e55826f/Documentation/admin-guide/cgroup-v2.rst?plain=1#L1280 setting. All processes within the pod are placed in a single cgroup, allowing the termination of the entire pod upon OOM killer activation, preventing an inconsistent pod state.
+Starting from version 1.28, Kubernetes supports the `memory.oom.group` https://github.com/torvalds/linux/blob/3c4aa44343777844e425c28f1427127f3e55826f/Documentation/admin-guide/cgroup-v2.rst?plain=1#L1280
+setting. All processes within the pod are placed in a single cgroup,
+allowing the termination of the entire pod upon OOM killer activation,
+preventing an inconsistent pod state.
 
-   - Upgrade your Kubernetes cluster to version 1.28 or higher.
-   - Confirm that this pull request https://github.com/kubernetes/kubernetes/pull/117793 has been incorporated into your Kubernetes installation.
+- Upgrade your Kubernetes cluster to version 1.28 or higher.
+- Confirm that this pull request https://github.com/kubernetes/kubernetes/pull/117793 has been incorporated into your Kubernetes installation.
 
 
 
