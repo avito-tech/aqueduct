@@ -231,7 +231,7 @@ class Flow:
         """ If queue size not specified manually, get queue size based on batch size for handler.
         We need at least batch_size places in queue and then some additional space
         """
-        if self._queue_size:
+        if self._queue_size is not None:
             return self._queue_size
 
         # queue should be able to store at least 20 task, that's seems reasonable
