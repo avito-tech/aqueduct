@@ -15,7 +15,7 @@ from threading import BrokenBarrierError
 from time import monotonic
 from typing import Dict, List, Literal, Optional, Union
 
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.resource_tracker import _resource_tracker  # noqa
 
 from .exceptions import FlowError, MPStartMethodValueError, NotRunningError
@@ -144,7 +144,6 @@ class Flow:
             raise NotRunningError
 
         with timeit() as timer:
-
             future = asyncio.Future()
             self._task_futures[task.task_id] = future
 
@@ -231,7 +230,7 @@ class Flow:
         """ If queue size not specified manually, get queue size based on batch size for handler.
         We need at least batch_size places in queue and then some additional space
         """
-        if self._queue_size:
+        if self._queue_size is not None:
             return self._queue_size
 
         # queue should be able to store at least 20 task, that's seems reasonable
@@ -364,46 +363,47 @@ class Flow:
         except queue.Empty:
             return None
 
+    def _read_from_queue(self, loop: asyncio.AbstractEventLoop, q: mp.Queue) -> None:
+        while self.state != FlowState.STOPPED:
+            task = self._fetch_from_queue(q)
+
+            if task is None:
+                continue
+
+            fut = self._task_futures.get(task.task_id)
+            if fut and not fut.cancelled() and not fut.done():
+                task.metrics.stop_transfer_timer(MAIN_PROCESS, task.priority)
+                task_size = getattr(q, 'task_size', None)
+                if task_size:
+                    task.metrics.save_task_size(task_size, MAIN_PROCESS, task.priority)
+
+                loop.call_soon_threadsafe(fut.set_result, task)
+
     async def _fetch_processed(self):
-        """ Fetching messages from output queue.
+        """Fetching messages from output queue.
 
         To handle messages from another process and not block asyncio loop, we run queue.get()
         in a separate thread
 
         """
         loop = asyncio.get_event_loop()
-        running_futures: Dict[int, Optional[Future]] = {}
         with ThreadPoolExecutor(max_workers=self._queue_priorities) as queue_fetch_executor:
-            while self.state != FlowState.STOPPED:
-                for priority in reversed(range(self._queue_priorities)):
-                    if running_futures.get(priority) is None:
-                        future = loop.run_in_executor(
-                            queue_fetch_executor,
-                            self._fetch_from_queue,
-                            self._queues[priority][-1].queue,
-                        )
-                        running_futures[priority] = future
-                await asyncio.wait(running_futures.values(), return_when=asyncio.FIRST_COMPLETED)
+            results_queues = [
+                queues_with_same_priority[-1].queue for queues_with_same_priority in self._queues
+            ]
+            tasks = [
+                loop.run_in_executor(queue_fetch_executor, self._read_from_queue, loop, q)
+                for q in results_queues
+            ]
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
+            for t in done:
+                try:
+                    t.result()
+                except Exception:
+                    log.exception('error in queue-consumer')
 
-                tasks = []
-                for priority in reversed(range(self._queue_priorities)):
-                    future = running_futures.get(priority)
-                    if future is not None and future.done():
-                        running_futures[priority] = None
-                        task = future.result()
-                        if task is not None:
-                            tasks.append(task)
-
-                for task in tasks:
-                    task.metrics.stop_transfer_timer(MAIN_PROCESS, task.priority)
-                    task_size = getattr(self._queues[task.priority][-1].queue, 'task_size', None)
-                    if task_size:
-                        task.metrics.save_task_size(task_size, MAIN_PROCESS, task.priority)
-
-                    future = self._task_futures.get(task.task_id)
-
-                    if future and not future.cancelled() and not future.done():
-                        future.set_result(task)
+            for t in pending:
+                t.cancel()
 
     async def _check_is_alive(self, sleep_sec: float = 1.):
         """Checks that all child processes are alive.

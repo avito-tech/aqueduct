@@ -26,7 +26,7 @@ class Worker:
 
     def __init__(
             self,
-            queues: List[FlowStepQueue],
+            queues: List[List[FlowStepQueue]],
             task_handler: BaseTaskHandler,
             batch_size: int,
             batch_timeout: float,

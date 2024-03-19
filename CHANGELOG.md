@@ -1,3 +1,6 @@
+# 1.11.4
+- Lower cpu usage in main process
+
 # 1.11.3
 - Add memory usage metrics
 
