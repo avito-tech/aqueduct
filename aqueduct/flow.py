@@ -415,8 +415,10 @@ class Flow:
                 for proc in context.processes:
                     if not proc.is_alive():
                         if self.is_running:
+                            handler_name = handler.__class__.__name__
                             log.error('The process %s for %s handler is dead',
-                                      proc.pid, handler.__class__.__name__)
+                                      proc.pid, handler_name)
+                            self._metrics_manager.collector.add_dead_processes_count(handler_name)
                             await self.stop(graceful=False)
             await asyncio.sleep(sleep_sec)
 
