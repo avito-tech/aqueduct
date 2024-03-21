@@ -9,6 +9,7 @@ from typing import (
 from . import AQUEDUCT
 from .collect import AqueductMetricsStorage
 
+
 TRANSFER_TIME_PREFIX = 'transfer_time'
 TASK_SIZE_PREFIX = 'task_size'
 HANDLE_TIME_PREFIX = 'handle_time'

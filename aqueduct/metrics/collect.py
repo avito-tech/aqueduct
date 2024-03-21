@@ -37,6 +37,7 @@ class AqueductMetricsStorage(TasksMetricsStorage):
         if isinstance(storage, AqueductMetricsStorage):
             self.queue_sizes.extend(storage.queue_sizes)
             self.tasks_stats.extend(storage.tasks_stats)
+            self.dead_processes_count.extend(storage.dead_processes_count)
 
     def extend_memory_usage(self, metrics: MetricsItems):
         self.memory_usage.extend(metrics)
