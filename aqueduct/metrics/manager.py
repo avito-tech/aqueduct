@@ -22,6 +22,8 @@ class MetricsManager:
         # Остановка фоновых корутин
         for task in self._tasks:
             task.cancel()
+        # Send last metrics
+        self.exporter.export(self.collector.extract_metrics())
 
     async def _export_metrics(self):
         while True:
