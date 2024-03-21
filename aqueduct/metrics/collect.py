@@ -30,13 +30,14 @@ class AqueductMetricsStorage(TasksMetricsStorage):
         self.queue_sizes = MetricsItems()
         self.tasks_stats = TasksStats()
         self.memory_usage = MetricsItems()
+        self.dead_processes_count = MetricsItems()
 
     def extend(self, storage: TasksMetricsStorage):
         super().extend(storage)
         if isinstance(storage, AqueductMetricsStorage):
             self.queue_sizes.extend(storage.queue_sizes)
             self.tasks_stats.extend(storage.tasks_stats)
-    
+
     def extend_memory_usage(self, metrics: MetricsItems):
         self.memory_usage.extend(metrics)
 
@@ -69,6 +70,9 @@ class Collector:
 
     def add_memory_usage(self, metrics: MetricsItems):
         self._metrics.extend_memory_usage(metrics)
+
+    def add_dead_processes_count(self, handler_name: str):
+        self._metrics.dead_processes_count.add(handler_name, 1)
 
     def extract_metrics(self) -> AqueductMetricsStorage:
         metrics = self._metrics
