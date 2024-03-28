@@ -1,3 +1,6 @@
+# 1.11.5
+- Changed default export period to 0.5 to fix metrics gaps
+
 # 1.11.4
 - Lower cpu usage in main process
 
