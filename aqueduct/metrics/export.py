@@ -9,6 +9,7 @@ from typing import (
 from . import AQUEDUCT
 from .collect import AqueductMetricsStorage
 
+
 TRANSFER_TIME_PREFIX = 'transfer_time'
 TASK_SIZE_PREFIX = 'task_size'
 HANDLE_TIME_PREFIX = 'handle_time'
@@ -17,6 +18,7 @@ BATCH_SIZE_PREFIX = 'batch_size'
 QSIZE_PREFIX = 'qsize'
 TASKS_PREFIX = 'tasks'
 MEMORY_USAGE_PREFIX = 'memory_usage'
+DEAD_PROCESSES_COUNT = 'dead_processes_count'
 
 
 class StatsDBuffer(Protocol):
@@ -74,6 +76,9 @@ class ToStatsDMetricsExporter(Exporter):
 
         for name, memory_usage in metrics.memory_usage.items:
             self.target.timing(f'{self.prefix}.{MEMORY_USAGE_PREFIX}.{name}', memory_usage)
+
+        for name, cnt in metrics.dead_processes_count.items:
+            self.target.timing(f'{self.prefix}.{DEAD_PROCESSES_COUNT}.{name}', cnt)
 
 
 class DummyExporter(Exporter):
