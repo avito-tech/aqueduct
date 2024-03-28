@@ -31,7 +31,7 @@ class StatsDBuffer(Protocol):
 
 
 class Exporter(ABC):
-    def __init__(self, target: Any, export_period: float = 10., prefix: str = None):
+    def __init__(self, target: Any, export_period: float = 0.5, prefix: str = None):
         self.target = target
         self.export_period = export_period
         if prefix is None:
@@ -46,7 +46,7 @@ class Exporter(ABC):
 
 class ToStatsDMetricsExporter(Exporter):
     """Translates aqueduct metrics to statsd metrics format."""
-    def __init__(self, target: StatsDBuffer, export_period: float = 10., prefix: str = None):
+    def __init__(self, target: StatsDBuffer, export_period: float = 0.5, prefix: str = None):
         super().__init__(target, export_period, prefix)
 
     def export(self, metrics: AqueductMetricsStorage):

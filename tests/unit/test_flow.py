@@ -175,6 +175,7 @@ class TestFlow:
         t1 = time.time()
 
         assert t1 - t0 == pytest.approx(slowest_handler.start_time, 0.5)
+        await flow.stop()
 
     async def test_start_waiting_timeout(self, task: Task):
         """flow.start(timeout) should raise FlowError when starting_timeout expired."""
@@ -189,6 +190,7 @@ class TestFlow:
         t1 = time.time()
 
         assert t1 - t0 == pytest.approx(timeout, 0.5)
+        await flow.stop()
 
     async def test_process_set_result(self, simple_flow: Flow, task: Task):
         assert task.result is None
