@@ -25,6 +25,7 @@ from .metrics import MAIN_PROCESS, MetricsTypes
 from .metrics.collect import Collector, TasksStats
 from .metrics.export import Exporter
 from .metrics.manager import get_metrics_manager
+from .metrics.processes import ProcessesStats
 from .metrics.queue import TaskMetricsQueue
 from .metrics.timer import timeit
 from .multiprocessing import (
@@ -411,6 +412,7 @@ class Flow:
         If at least one process is not alive, it stops Flow.
         """
         while self.state != FlowState.STOPPED:
+            processes_stats = ProcessesStats()
             for handler, context in self._contexts.items():
                 for proc in context.processes:
                     if not proc.is_alive():
@@ -418,8 +420,12 @@ class Flow:
                             handler_name = handler.__class__.__name__
                             log.error('The process %s for %s handler is dead',
                                       proc.pid, handler_name)
-                            self._metrics_manager.collector.add_dead_processes_count(handler_name)
+                            processes_stats.add_dead_process()
+                            self._metrics_manager.collector.add_processes_stats(processes_stats)
                             await self.stop(graceful=False)
+                    else:
+                        processes_stats.add_running_process()
+            self._metrics_manager.collector.add_processes_stats(processes_stats)
             await asyncio.sleep(sleep_sec)
 
     @staticmethod

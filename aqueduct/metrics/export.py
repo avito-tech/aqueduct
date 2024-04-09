@@ -18,7 +18,7 @@ BATCH_SIZE_PREFIX = 'batch_size'
 QSIZE_PREFIX = 'qsize'
 TASKS_PREFIX = 'tasks'
 MEMORY_USAGE_PREFIX = 'memory_usage'
-DEAD_PROCESSES_COUNT = 'dead_processes_count'
+PROCESSES_PREFIX = 'processes'
 
 
 class StatsDBuffer(Protocol):
@@ -77,8 +77,9 @@ class ToStatsDMetricsExporter(Exporter):
         for name, memory_usage in metrics.memory_usage.items:
             self.target.timing(f'{self.prefix}.{MEMORY_USAGE_PREFIX}.{name}', memory_usage)
 
-        for name, cnt in metrics.dead_processes_count.items:
-            self.target.timing(f'{self.prefix}.{DEAD_PROCESSES_COUNT}.{name}', cnt)
+        for name, cnt in metrics.processes_stats.items:
+            if cnt > 0:
+                self.target.count(f'{self.prefix}.{PROCESSES_PREFIX}.{name}', cnt)
 
 
 class DummyExporter(Exporter):
