@@ -1,3 +1,6 @@
+# 1.11.6
+- Add metrics with count if running and dead processes
+
 # 1.11.5
 - Changed default export period to 0.5 to fix metrics gaps
 
