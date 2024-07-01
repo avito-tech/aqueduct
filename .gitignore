@@ -10,3 +10,4 @@ dist/
 
 # bench
 tests/benchmarks/bench_service/maas/data/models/
+.eggs*
