@@ -6,7 +6,7 @@ with open('README.rst') as f:
 packages = ['aqueduct']
 
 required = [
-    'cffi==1.15.0',
+    'cffi==1.16.0',
     'psutil==5.9.4',
 ]
 
