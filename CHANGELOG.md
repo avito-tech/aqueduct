@@ -1,3 +1,6 @@
+# 1.11.7
+- Update `cffi` version to allow python3.12 support, add `setuptools` to requirements
+
 # 1.11.6
 - Add metrics with count if running and dead processes
 
