@@ -6,8 +6,9 @@ with open('README.rst') as f:
 packages = ['aqueduct']
 
 required = [
-    'cffi==1.15.0',
+    'cffi==1.16.0',
     'psutil==5.9.4',
+    'setuptools==70.2.0',
 ]
 
 extras = {
@@ -22,7 +23,7 @@ extras = {
 setup(
     name='aqueduct',
     packages=find_packages(),
-    version='1.11.6',
+    version='1.11.7',
     license='MIT',
     license_files='LICENSE.txt',
     author='Data Science SWAT',

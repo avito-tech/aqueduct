@@ -1,4 +1,5 @@
 numpy
 aiohttp
-cffi==1.15.0
+cffi==1.16.0
 psutil==5.9.4
+setuptools==70.2.0
