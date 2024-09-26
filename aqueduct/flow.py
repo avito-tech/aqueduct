@@ -25,7 +25,6 @@ from .metrics import MAIN_PROCESS, MetricsTypes
 from .metrics.collect import Collector, TasksStats
 from .metrics.export import Exporter
 from .metrics.manager import get_metrics_manager
-from .metrics.processes import ProcessesStats
 from .metrics.queue import TaskMetricsQueue
 from .metrics.timer import timeit
 from .multiprocessing import (
@@ -255,13 +254,21 @@ class Flow:
                 nprocs_memory_sum = 0
                 for process in processes:
                     memory = process.memory_info().rss
-                    nprocs_memory_sum  += memory
+                    nprocs_memory_sum += memory
                     metrics.add(flow_step_name, memory)
                 all_memory_usage += nprocs_memory_sum
                 if len(processes) != 1:
                     metrics.add(f'{flow_step_name}_nprocs_sum', nprocs_memory_sum)
             metrics.add('all_memory_usage', all_memory_usage)
             self._metrics_manager.collector.add_memory_usage(metrics)
+            await asyncio.sleep(sleep_sec)
+
+    async def _count_processes(self, sleep_sec: float = 1.):
+        pod_name = os.environ.get('K8S_POD', 'local')
+        while self.state != FlowState.STOPPED:
+            metrics = MetricsItems()
+            metrics.add(f'running.{pod_name}', len(mp.active_children()))
+            self._metrics_manager.collector.add_processes_count(metrics)
             await asyncio.sleep(sleep_sec)
 
     def _run_steps(self, timeout: Optional[int]):
@@ -331,7 +338,9 @@ class Flow:
         self._tasks.append(asyncio.ensure_future(self._check_is_alive()))
 
         self._metrics_manager.start(queues_info=self._get_queues_info())
+
         self._tasks.append(asyncio.ensure_future(self._check_memory_usage()))
+        self._tasks.append(asyncio.ensure_future(self._count_processes()))
 
     def _get_queues_info(self) -> Dict[mp.Queue, str]:
         """Returns queues between Step handlers and its names.
@@ -412,7 +421,6 @@ class Flow:
         If at least one process is not alive, it stops Flow.
         """
         while self.state != FlowState.STOPPED:
-            processes_stats = ProcessesStats()
             for handler, context in self._contexts.items():
                 for proc in context.processes:
                     if not proc.is_alive():
@@ -420,12 +428,7 @@ class Flow:
                             handler_name = handler.__class__.__name__
                             log.error('The process %s for %s handler is dead',
                                       proc.pid, handler_name)
-                            processes_stats.add_dead_process()
-                            self._metrics_manager.collector.add_processes_stats(processes_stats)
                             await self.stop(graceful=False)
-                    else:
-                        processes_stats.add_running_process()
-            self._metrics_manager.collector.add_processes_stats(processes_stats)
             await asyncio.sleep(sleep_sec)
 
     @staticmethod
