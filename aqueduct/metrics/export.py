@@ -77,9 +77,8 @@ class ToStatsDMetricsExporter(Exporter):
         for name, memory_usage in metrics.memory_usage.items:
             self.target.timing(f'{self.prefix}.{MEMORY_USAGE_PREFIX}.{name}', memory_usage)
 
-        for name, cnt in metrics.processes_stats.items:
-            if cnt > 0:
-                self.target.count(f'{self.prefix}.{PROCESSES_PREFIX}.{name}', cnt)
+        for name, processes_count in metrics.processes_count.items:
+            self.target.timing(f'{self.prefix}.{PROCESSES_PREFIX}.{name}', processes_count)
 
 
 class DummyExporter(Exporter):

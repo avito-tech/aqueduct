@@ -5,7 +5,6 @@ from typing import Dict, Iterable, Tuple
 
 from . import IMetricsItems
 from .base import MetricsItems, MetricsTypes
-from .processes import ProcessesStats
 from .task import TasksMetricsStorage
 
 
@@ -31,17 +30,19 @@ class AqueductMetricsStorage(TasksMetricsStorage):
         self.queue_sizes = MetricsItems()
         self.tasks_stats = TasksStats()
         self.memory_usage = MetricsItems()
-        self.processes_stats = ProcessesStats()
+        self.processes_count = MetricsItems()
 
     def extend(self, storage: TasksMetricsStorage):
         super().extend(storage)
         if isinstance(storage, AqueductMetricsStorage):
             self.queue_sizes.extend(storage.queue_sizes)
             self.tasks_stats.extend(storage.tasks_stats)
-            self.processes_stats.extend(storage.processes_stats)
 
     def extend_memory_usage(self, metrics: MetricsItems):
         self.memory_usage.extend(metrics)
+
+    def extend_processes_count(self, metrics: MetricsItems):
+        self.processes_count.extend(metrics)
 
 
 class Collector:
@@ -73,8 +74,8 @@ class Collector:
     def add_memory_usage(self, metrics: MetricsItems):
         self._metrics.extend_memory_usage(metrics)
 
-    def add_processes_stats(self, stats: ProcessesStats):
-        self._metrics.processes_stats.extend(stats)
+    def add_processes_count(self, metrics: MetricsItems):
+        self._metrics.extend_processes_count(metrics)
 
     def extract_metrics(self) -> AqueductMetricsStorage:
         metrics = self._metrics
