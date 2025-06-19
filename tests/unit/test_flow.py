@@ -17,7 +17,7 @@ from aqueduct.flow import (
     FlowState,
     FlowStep,
 )
-from aqueduct.handler import BaseTaskHandler
+from aqueduct.handler import AsyncTaskHandler, BaseTaskHandler
 from aqueduct.metrics import MAIN_PROCESS
 from aqueduct.task import BaseTask, DEFAULT_PRIORITY
 from tests.unit.conftest import (
@@ -70,6 +70,20 @@ class CatDetectorHandler(BaseTaskHandler):
         for task, predict in zip(tasks, predicts):
             task.result = predict
 
+class HandlerAsync(AsyncTaskHandler):
+    async def handle(self, *tasks: BaseTask):
+        for task in tasks[:2]:
+            task.done()
+            task.result = True
+        await asyncio.sleep(0.01)
+        for task in tasks[2:4]:
+            task.done()
+            task.result = True
+        await asyncio.sleep(0.01)
+        for task in tasks[4:]:
+            task.done()
+            task.result = True
+
 
 @pytest.fixture
 async def flow_with_not_batch_handler(loop) -> Flow:
@@ -98,14 +112,27 @@ async def flow_with_dynamic_batch_handler(loop) -> Flow:
             ))) as flow:
         yield flow
 
+@pytest.fixture
+async def flow_with_dynamic_batch_handler_async(loop) -> Flow:
+    async with run_flow(Flow(
+            FlowStep(
+                HandlerAsync(),
+                batch_size=TASKS_BATCH_SIZE,
+            ))) as flow:
+        yield flow
 
-async def process_tasks(flow: Flow, tasks: List[ArrayFieldTask]):
+
+async def process_tasks(flow: Flow, tasks: List[BaseTask]):
     await asyncio.gather(*(flow.process(task) for task in tasks))
 
 
 @pytest.fixture
 def tasks_batch(array):
     return [ArrayFieldTask(array) for _ in range(TASKS_BATCH_SIZE)]
+
+@pytest.fixture
+def tasks_batch_base():
+    return [BaseTask() for _ in range(TASKS_BATCH_SIZE)]
 
 
 class ShareArrayHandler(BaseTaskHandler):
@@ -161,12 +188,38 @@ class SlowStartingHandler(BaseTaskHandler):
         task.result = os.getpid()
 
 
+class SlowStartingAsyncHandler(AsyncTaskHandler):
+    start_time: int
+
+    async def on_start(self):
+        await asyncio.sleep(self.start_time)
+
+    async def handle(self, task: Task):
+        task.result = os.getpid()
+        task.done()
+
+
 class TestFlow:
     async def test_start_waiting_for_subproccess_to_start(self, task: Task):
         """flow.start() should block until all subprocesses fully initialized."""
         handler = SlowStartingHandler()
         handler.start_time = 1
         slowest_handler = SlowStartingHandler()
+        slowest_handler.start_time = 3
+        flow = Flow(FlowStep(handler, nprocs=3), FlowStep(slowest_handler, nprocs=3))
+
+        t0 = time.time()
+        flow.start()
+        t1 = time.time()
+
+        assert t1 - t0 == pytest.approx(slowest_handler.start_time, 0.5)
+        await flow.stop()
+
+    async def test_start_waiting_for_subproccess_to_start_async(self, task: Task):
+        """flow.start() should block until all subprocesses fully initialized."""
+        handler = SlowStartingAsyncHandler()
+        handler.start_time = 1
+        slowest_handler = SlowStartingAsyncHandler()
         slowest_handler.start_time = 3
         flow = Flow(FlowStep(handler, nprocs=3), FlowStep(slowest_handler, nprocs=3))
 
@@ -192,9 +245,30 @@ class TestFlow:
         assert t1 - t0 == pytest.approx(timeout, 0.5)
         await flow.stop()
 
+    async def test_start_waiting_timeout_async(self, task: Task):
+        """flow.start(timeout) should raise FlowError when starting_timeout expired."""
+        handler = SlowStartingAsyncHandler()
+        handler.start_time = 10
+        flow = Flow(FlowStep(handler, nprocs=3))
+
+        timeout = 3
+        t0 = time.time()
+        with pytest.raises(TimeoutError):
+            flow.start(timeout=timeout)
+        t1 = time.time()
+
+        assert t1 - t0 == pytest.approx(timeout, 0.5)
+        await flow.stop()
+
     async def test_process_set_result(self, simple_flow: Flow, task: Task):
         assert task.result is None
         result = await simple_flow.process(task)
+        assert result
+        assert task.result == 'test'
+
+    async def test_process_set_result_async(self, simple_async_flow: Flow, task: Task):
+        assert task.result is None
+        result = await simple_async_flow.process(task)
         assert result
         assert task.result == 'test'
 
@@ -343,6 +417,15 @@ class TestFlow:
             timeout=CatDetector.BATCH_PROCESS_TIME + CatDetector.IMAGE_PROCESS_TIME + CatDetector.OVERHEAD_TIME,
         )
         assert all(task.result for task in tasks_batch)
+
+    async def test_process_performance_with_dynamic_batching_async(self, flow_with_dynamic_batch_handler_async, tasks_batch_base):
+        """Checks that all tasks will be processed on time with async handler.
+        """
+        await asyncio.wait_for(
+            process_tasks(flow_with_dynamic_batch_handler_async, tasks_batch_base),
+            timeout=5,
+        )
+        assert all(task.result for task in tasks_batch_base)
 
     async def test_process_seq_batch_filling(self, tasks_batch, flow_with_multiproc_bathcer):
         """Checks that batches are being filled sequentially."""

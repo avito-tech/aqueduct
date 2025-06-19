@@ -15,9 +15,9 @@ import numpy as np
 import pytest
 
 from aqueduct.flow import Flow, FlowStep
-from aqueduct.handler import BaseTaskHandler
+from aqueduct.handler import AsyncTaskHandler, BaseTaskHandler
 from aqueduct.logger import LOGGER_NAME
-from aqueduct.multiprocessing import ProcessContext
+
 from aqueduct.shm.numpy import NPArraySharedData
 from aqueduct.task import BaseTask
 
@@ -131,12 +131,27 @@ class SleepHandler(BaseTaskHandler):
     def handle(self, *tasks: BaseTask):
         time.sleep(self._handler_sec)
 
+class SleepAsyncHandler(AsyncTaskHandler):
+    def __init__(self, handler_sec: float):
+        self._handler_sec: float = handler_sec
+
+    async def handle(self, *tasks: BaseTask):
+        await asyncio.sleep(self._handler_sec)
+        for task in tasks:
+            task.done()
+
 
 class SleepHandler1(SleepHandler):
     pass
 
 
 class SleepHandler2(SleepHandler):
+    pass
+class SleepHandler1Async(SleepAsyncHandler):
+    pass
+
+
+class SleepHandler2Async(SleepAsyncHandler):
     pass
 
 
@@ -145,6 +160,13 @@ class SetResultSleepHandler(SleepHandler):
         super().handle(*tasks)
         for task in tasks:
             task.result = 'test'
+
+class SetResultSleepAsyncHandler(SleepAsyncHandler):
+    async def handle(self, *tasks: Task):
+        await super().handle(*tasks)
+        for task in tasks:
+            task.result = 'test'
+            task.done()
 
 
 @pytest.fixture
@@ -168,6 +190,14 @@ def sleep_handlers() -> Tuple[SleepHandler, ...]:
         SetResultSleepHandler(0.002),
     )
 
+@pytest.fixture
+def sleep_async_handlers() -> Tuple[SleepAsyncHandler, ...]:
+    return (
+        SleepHandler1Async(0.001),
+        SleepHandler2Async(0.003),
+        SetResultSleepAsyncHandler(0.002),
+    )
+
 
 @pytest.fixture
 def slow_sleep_handlers() -> Tuple[SleepHandler, ...]:
@@ -178,11 +208,27 @@ def slow_sleep_handlers() -> Tuple[SleepHandler, ...]:
     )
 
 @pytest.fixture
+def slow_sleep_async_handlers() -> Tuple[SleepAsyncHandler, ...]:
+    return (
+        SleepHandler1Async(0.1),
+        SleepHandler2Async(0.3),
+        SetResultSleepAsyncHandler(0.2),
+    )
+
+@pytest.fixture
 def slow_priority_queue_handlers() -> Tuple[SleepHandler, ...]:
     return (
         SleepHandler1(0.1),
         SleepHandler2(0.1),
         SetResultSleepHandler(0.1),
+    )
+
+@pytest.fixture
+def slow_priority_queue_async_handlers() -> Tuple[SleepAsyncHandler, ...]:
+    return (
+        SleepHandler1Async(0.1),
+        SleepHandler2Async(0.1),
+        SetResultSleepAsyncHandler(0.1),
     )
 
 
@@ -209,6 +255,22 @@ async def slow_priority_queue_flow(loop, slow_priority_queue_handlers: Tuple[Sle
     async with run_flow(Flow(*slow_priority_queue_handlers, queue_priorities=2)) as flow:
         yield flow
 
+@pytest.fixture
+async def simple_async_flow(loop, sleep_async_handlers: Tuple[SleepAsyncHandler, ...]) -> Flow:
+    async with run_flow(Flow(*sleep_async_handlers)) as flow:
+        yield flow
+
+
+@pytest.fixture
+async def slow_simple_async_flow(loop, slow_sleep_async_handlers: Tuple[SleepAsyncHandler, ...]) -> Flow:
+    async with run_flow(Flow(*slow_sleep_async_handlers)) as flow:
+        yield flow
+
+@pytest.fixture
+async def slow_priority_queue_async_flow(loop, slow_priority_queue_async_handlers: Tuple[SleepAsyncHandler, ...]) -> Flow:
+    async with run_flow(Flow(*slow_priority_queue_async_handlers, queue_priorities=2)) as flow:
+        yield flow
+
 
 @pytest.fixture
 async def handle_condition_flow(loop) -> Flow:
@@ -223,6 +285,25 @@ async def handle_condition_flow(loop) -> Flow:
         ),
         FlowStep(
             SetResultSleepHandler(0.001),
+            handle_condition=lambda task: task._type in [0, 1]
+        ),
+    )
+    async with run_flow(Flow(*steps)) as flow:
+        yield flow
+
+@pytest.fixture
+async def handle_condition_async_flow(loop) -> Flow:
+    steps = (
+        FlowStep(
+            SleepHandler1Async(0.001),
+            handle_condition=lambda task: task._type == 0
+        ),
+        FlowStep(
+            SleepHandler2Async(0.001),
+            handle_condition=lambda task: task._type == 1
+        ),
+        FlowStep(
+            SetResultSleepAsyncHandler(0.001),
             handle_condition=lambda task: task._type in [0, 1]
         ),
     )

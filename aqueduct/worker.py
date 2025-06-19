@@ -1,12 +1,16 @@
+import concurrent.futures
 import multiprocessing as mp
 import queue
 import signal
 import sys
 from threading import BrokenBarrierError
 from time import monotonic
-from typing import Iterator, List, Optional
+import time
+from typing import Iterator, List, Optional, Union
+import asyncio
+import gc
 
-from .handler import BaseTaskHandler
+from .handler import AsyncTaskHandler, BaseTaskHandler
 from .logger import log
 from .metrics.timer import (
     Timer,
@@ -15,7 +19,10 @@ from .metrics.timer import (
 from .queues import FlowStepQueue, select_next_queue
 from .task import BaseTask, DEFAULT_PRIORITY, StopTask
 
-MAX_SPIN_ITERATIONS=1000
+MAX_SPIN_ITERATIONS = 1000
+MIN_SLEEP_DURATION = 0.001
+MAX_SLEEP_DURATION = 0.01
+GC_COLLECT_FREQUENCY = 100
 
 
 class Worker:
@@ -27,7 +34,7 @@ class Worker:
     def __init__(
             self,
             queues: List[List[FlowStepQueue]],
-            task_handler: BaseTaskHandler,
+            task_handler: Union[BaseTaskHandler, AsyncTaskHandler],
             batch_size: int,
             batch_timeout: float,
             batch_lock: Optional[mp.RLock],
@@ -49,10 +56,17 @@ class Worker:
             self._queues[priority][self._step_number - 1].queue
             for priority in reversed(range(self._queue_priorities))
         ]
+        self._loop = None  # Initialize to None to prevent dangling references
 
     def _start(self):
         """Runs something huge (e.g. model) in child process."""
-        self.task_handler.on_start()
+        if isinstance(self.task_handler, AsyncTaskHandler):
+            if not self._loop:
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+            self._loop.run_until_complete(self.task_handler.on_start())
+        else:
+            self.task_handler.on_start()
 
     def _wait_task_no_timeout(self) -> Optional[BaseTask]:
         # There is a problem with Python MP Queue implementation.
@@ -260,13 +274,182 @@ class Worker:
 
         log.info(f'[Worker] handler {self.name} ok, starting loop')
 
+        try:
+            if isinstance(self.task_handler, AsyncTaskHandler):
+                if not self._loop:
+                    raise ValueError('Loop is not initialized')
+                try:
+                    self._loop.run_until_complete(self.loop_async())
+                finally:
+                    # Proper cleanup of the event loop
+                    try:
+                        # Cancel all pending tasks
+                        pending = asyncio.all_tasks(self._loop)
+                        if pending:
+                            for task in pending:
+                                task.cancel()
+                            # Wait for all tasks to be cancelled
+                            self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    except Exception:
+                        pass  # Ignore cleanup errors
+                    finally:
+                        self._loop.close()
+                        self._loop = None
+            else:
+                self.loop_sync()
+        finally:
+            # Ensure stop task is forwarded even if an exception occurs
+            if self._stop_task:
+                self._queues[DEFAULT_PRIORITY][self._step_number].queue.put(self._stop_task)
+
+    def end_task(self, task: BaseTask, seconds: float):
+        task.metrics.handle_times.add(self.step_name, seconds)
+        self._post_handle(task)
+
+    def loop_sync(self):
         for tasks_batch in self._iter_batches():
-            with timeit() as timer:
+            timer = timeit()
+            with timer:
                 self.task_handler.handle(*tasks_batch)
 
             for task in tasks_batch:
                 task.metrics.handle_times.add(self.step_name, timer.seconds)
                 self._post_handle(task)
 
-        if self._stop_task:
-            self._queues[DEFAULT_PRIORITY][self._step_number].queue.put(self._stop_task)
+    def _run_async_handler_in_thread(self, tasks_batch):
+        """Wrapper function to run async handler in a thread with its own event loop.
+        
+        The async handler should set task.done() when each task is finished
+        to enable immediate forwarding to the next step instead of waiting for the entire batch.
+        
+        Example usage in your AsyncTaskHandler:
+            async def handle(self, *tasks):
+                first_batch = tasks[:self._batch_size] # e.g. batch of images of same size
+                second_batch = tasks[self._batch_size:] # e.g. another batch of images of other same size
+                
+                # e.g. torch cuda operation on images
+                result = some_io_bound_operation(first_batch)
+                for task, result in zip(first_batch, result):
+                    task.result = result
+                    task.done()
+
+                # here the tasks in first_batch are done and headed to the next step
+                result = some_io_bound_operation(second_batch)
+                for task, result in zip(second_batch, result):
+                    task.result = result
+                    task.done()
+
+                # here the tasks in second_batch are done and headed to the next step as usual
+        """
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            return loop.run_until_complete(self.task_handler.handle(*tasks_batch))
+        finally:
+            # Properly close the event loop to prevent memory leaks
+            try:
+                # Cancel all pending tasks
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    for task in pending:
+                        task.cancel()
+                    # Wait for all tasks to be cancelled
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except Exception:
+                pass  # Ignore cleanup errors
+            finally:
+                loop.close()
+
+    async def loop_async(self):
+        if not isinstance(self.task_handler, AsyncTaskHandler):
+            raise ValueError('AsyncTaskHandler is not supported for sync loop')
+
+        batch_counter = 0  # Track batch count for periodic GC
+        
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            for tasks_batch in self._iter_batches():
+                start_time = time.monotonic()
+
+                batch_counter += 1
+                
+
+                batch_size = len(tasks_batch)
+                processed_tasks = set()  
+                
+
+                for task in tasks_batch:
+                    task.undone()
+
+
+                executor_future = self._loop.run_in_executor(
+                    pool, 
+                    self._run_async_handler_in_thread, 
+                    tasks_batch
+                )
+
+                sleep_duration = MIN_SLEEP_DURATION
+                consecutive_empty_checks = 0
+                
+                while not executor_future.done():
+
+                    current_completed = 0
+                    for task in tasks_batch:
+
+                        if task.task_id in processed_tasks or not task.is_done():
+                            continue
+                            
+
+                        processed_tasks.add(task.task_id)
+                        current_completed += 1
+                        log.debug(f'[{self.name}] Task completed.')
+                        self.end_task(task, time.monotonic() - start_time)
+                        log.debug(f'[{self.name}] Task ended in {time.monotonic() - start_time} seconds')
+                    
+                    if current_completed > 0:
+                        log.debug(f'[{self.name}] Processed {current_completed} tasks this iteration')
+                        log.debug(f'[{self.name}] Total processed: {len(processed_tasks)}/{batch_size}')
+                    
+
+                    if current_completed == 0:
+                        consecutive_empty_checks += 1
+
+                        sleep_duration = min(MAX_SLEEP_DURATION, sleep_duration * 1.1)
+                    else:
+                        consecutive_empty_checks = 0
+                        sleep_duration = MIN_SLEEP_DURATION  
+                    
+                    log.debug(f'[{self.name}] Sleeping for {sleep_duration} seconds')
+                    await asyncio.sleep(sleep_duration)
+
+
+                try:
+                    executor_future.result()
+                except Exception:
+
+                    for task in tasks_batch:
+                        if task.is_done():
+                            task.undone()
+                    raise
+
+
+                if len(processed_tasks) < batch_size:
+                    log.debug(f'[{self.name}] Processing remaining task.')
+                    for task in tasks_batch:
+                        if task.task_id not in processed_tasks:
+                            self.end_task(task, time.monotonic() - start_time)
+                            log.debug(f'[{self.name}] Task ended in {time.monotonic() - start_time} seconds')
+                
+
+                for task in tasks_batch:
+                    if task.is_done():
+                        task.undone()
+                
+
+                del tasks_batch
+                
+
+                if batch_counter % GC_COLLECT_FREQUENCY == 0:
+                    gc.collect()
+                    batch_counter = 0
+

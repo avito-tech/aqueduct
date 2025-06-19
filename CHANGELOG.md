@@ -1,3 +1,6 @@
+# 1.11.8
+- Add async tasks handler for io and async operation in step 
+  
 # 1.11.7
 - Update `cffi` version to allow python3.12 support, add `setuptools` to requirements
 

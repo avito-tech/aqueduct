@@ -1,3 +1,4 @@
+import inspect
 from typing import Callable
 from .task import BaseTask
 
@@ -20,5 +21,25 @@ class BaseTaskHandler:
         pass
 
     def handle(self, *tasks: BaseTask):
+        """Called when a task is received from the queue."""
+        raise NotImplementedError
+
+
+class AsyncTaskHandler(BaseTaskHandler):
+    """The class for your async handlers."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not inspect.iscoroutinefunction(self.on_start):
+            raise ValueError('on_start must be a coroutine function')
+        if not inspect.iscoroutinefunction(self.handle):
+            raise ValueError('handle must be a coroutine function')
+
+    async def on_start(self):
+        """Called at startup in a child process.
+        So that the model takes up memory only in the subprocess, not in the parent."""
+        pass
+
+    async def handle(self, *tasks: BaseTask):
         """Called when a task is received from the queue."""
         raise NotImplementedError

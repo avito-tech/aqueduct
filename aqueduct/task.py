@@ -1,6 +1,7 @@
+import asyncio
 import uuid
 from time import monotonic
-from typing import Sequence, Set, Union, Optional
+from typing import Callable, Sequence, Set, Union, Optional
 
 from .metrics.task import TaskMetrics
 from .shm import SharedFieldsMixin
@@ -65,6 +66,19 @@ class BaseTask(SharedFieldsMixin):
         for field, value in source_task.__dict__.items():
             if field not in immutable_fields:
                 setattr(self, field, value)
+
+    def done(self):
+        """Mark task as completed in async handler step."""
+        self._completed = True
+
+    def undone(self):
+        """Mark task as not completed in async handler step."""
+        if hasattr(self, '_completed'):
+            delattr(self, '_completed')
+
+    def is_done(self):
+        """Check if task is completed in async handler step."""
+        return getattr(self, '_completed', False)
 
 
 class StopTask(BaseTask):
