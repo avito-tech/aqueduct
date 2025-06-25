@@ -4,9 +4,10 @@ import signal
 import sys
 from threading import BrokenBarrierError
 from time import monotonic
-from typing import Iterator, List, Optional
+import time
+from typing import Iterator, List, Optional, Union
 
-from .handler import BaseTaskHandler
+from .handler import AsyncTaskHandler, BaseTaskHandler
 from .logger import log
 from .metrics.timer import (
     Timer,
@@ -15,7 +16,10 @@ from .metrics.timer import (
 from .queues import FlowStepQueue, select_next_queue
 from .task import BaseTask, DEFAULT_PRIORITY, StopTask
 
-MAX_SPIN_ITERATIONS=1000
+MAX_SPIN_ITERATIONS = 1000
+MIN_SLEEP_DURATION = 0.001
+MAX_SLEEP_DURATION = 0.01
+GC_COLLECT_FREQUENCY = 100
 
 
 class Worker:
@@ -27,7 +31,7 @@ class Worker:
     def __init__(
             self,
             queues: List[List[FlowStepQueue]],
-            task_handler: BaseTaskHandler,
+            task_handler: Union[BaseTaskHandler, AsyncTaskHandler],
             batch_size: int,
             batch_timeout: float,
             batch_lock: Optional[mp.RLock],
@@ -49,6 +53,7 @@ class Worker:
             self._queues[priority][self._step_number - 1].queue
             for priority in reversed(range(self._queue_priorities))
         ]
+        self._loop = None  # Initialize to None to prevent dangling references
 
     def _start(self):
         """Runs something huge (e.g. model) in child process."""
@@ -260,13 +265,43 @@ class Worker:
 
         log.info(f'[Worker] handler {self.name} ok, starting loop')
 
+        try:
+            if isinstance(self.task_handler, AsyncTaskHandler):
+                self.loop_async()
+            else:
+                self.loop_sync()
+        finally:
+            # Ensure stop task is forwarded even if an exception occurs
+            if self._stop_task:
+                self._queues[DEFAULT_PRIORITY][self._step_number].queue.put(self._stop_task)
+
+    def end_task(self, task: BaseTask, seconds: float):
+        task.metrics.handle_times.add(self.step_name, seconds)
+        self._post_handle(task)
+
+    def end_task_async(self, task: BaseTask, start_time: float):
+        task.metrics.handle_times.add(self.step_name, monotonic() - start_time)
+        self._post_handle(task)
+
+    def loop_sync(self):
         for tasks_batch in self._iter_batches():
-            with timeit() as timer:
+            timer = timeit()
+            with timer:
                 self.task_handler.handle(*tasks_batch)
 
             for task in tasks_batch:
                 task.metrics.handle_times.add(self.step_name, timer.seconds)
                 self._post_handle(task)
 
-        if self._stop_task:
-            self._queues[DEFAULT_PRIORITY][self._step_number].queue.put(self._stop_task)
+    def loop_async(self):
+        if not isinstance(self.task_handler, AsyncTaskHandler):
+            raise ValueError('AsyncTaskHandler is not supported for sync loop')
+
+        for tasks_batch in self._iter_batches():
+            if not tasks_batch:
+                return
+
+            for task in tasks_batch:
+                task.schedule_callback(self.end_task_async, time.monotonic())
+            
+            self.task_handler.handle(*tasks_batch)

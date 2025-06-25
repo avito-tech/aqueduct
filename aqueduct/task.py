@@ -1,19 +1,20 @@
 import uuid
 from time import monotonic
-from typing import Sequence, Set, Union, Optional
+from typing import Callable, Sequence, Set, Union, Optional
 
 from .metrics.task import TaskMetrics
 from .shm import SharedFieldsMixin
+from .logger import log
 
 
 DEFAULT_PRIORITY = 0
-
 
 class BaseTask(SharedFieldsMixin):
     task_id: Union[str, Sequence[str]] = ''
     priority: int = DEFAULT_PRIORITY
     expiration_time: Optional[float] = None
     metrics: Optional[TaskMetrics] = None
+    callback: Optional[Callable[['BaseTask', float], None]] = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -65,6 +66,19 @@ class BaseTask(SharedFieldsMixin):
         for field, value in source_task.__dict__.items():
             if field not in immutable_fields:
                 setattr(self, field, value)
+
+    def done(self):
+        """Mark task as completed in async handler step."""
+        if self.callback:
+            log.debug(f'Task {self.task_id} is done')
+            callback = self.callback
+            self.callback = None
+            callback(self, self.start_time)
+
+    def schedule_callback(self, callback: Callable[['BaseTask', float], None], start_time: float):
+        """Mark task as not completed in async handler step."""
+        self.start_time = start_time
+        self.callback = callback
 
 
 class StopTask(BaseTask):

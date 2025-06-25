@@ -8,6 +8,10 @@ dist/
 # IDE
 .idea
 
+# venv
+venv/
+.venv/
+
 # bench
 tests/benchmarks/bench_service/maas/data/models/
 .eggs*

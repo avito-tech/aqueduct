@@ -22,8 +22,8 @@ extras = {
 
 setup(
     name='aqueduct',
-    packages=find_packages(),
-    version='1.11.7',
+    packages=find_packages(exclude=("tests",)),
+    version='1.11.8',
     license='MIT',
     license_files='LICENSE.txt',
     author='Data Science SWAT',
