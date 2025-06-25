@@ -35,11 +35,11 @@ class AsyncTaskHandler(BaseTaskHandler):
         if not inspect.iscoroutinefunction(self.handle):
             raise ValueError('handle must be a coroutine function')
 
-    async def on_start(self):
+    def on_start(self):
         """Called at startup in a child process.
         So that the model takes up memory only in the subprocess, not in the parent."""
         pass
 
-    async def handle(self, *tasks: BaseTask):
+    def handle(self, *tasks: BaseTask):
         """Called when a task is received from the queue."""
         raise NotImplementedError
