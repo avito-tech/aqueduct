@@ -171,7 +171,6 @@ class Flow:
 
         with timeit() as timer:
             future = asyncio.Future()
-            log.info(f'process task {task.task_id}')
             self._task_futures[task.task_id] = future
 
             task.flow_id = self._flow_id
@@ -184,7 +183,6 @@ class Flow:
                 queues=self._queues,
                 task=task,
             )
-            log.info(f'{task.task_id} put to queue {to_queue}')
             while self.state != FlowState.STOPPED and (monotonic() - start_time) < timeout_sec:
                 try:
                     to_queue.put(
@@ -207,11 +205,9 @@ class Flow:
             # todo is it correct to hide a specific error behind a general FlowError?
             except asyncio.TimeoutError:
                 tasks_stats.timeout += 1
-                log.info(f'timeout {task.task_id}')
                 raise FlowError('Task timeout error')
             except asyncio.CancelledError:
                 tasks_stats.cancel += 1
-                log.info(f'cancell {task.task_id}')
                 if self.state in (FlowState.STOPPING, FlowState.STOPPED):
                     raise FlowError('Task was cancelled')
                 else:
@@ -410,7 +406,6 @@ class Flow:
 
             if task is None:
                 continue
-            log.info(f'Received task {task} from queue {q}')
             fut = self._task_futures.get(task.task_id)
             if fut and not fut.cancelled() and not fut.done():
                 task.metrics.stop_transfer_timer(MAIN_PROCESS, task.priority)
@@ -433,7 +428,6 @@ class Flow:
                 queues_with_same_priority[self._flow_id - self._concurrency].queue for queues_with_same_priority in
                 self._queues
             ]
-            log.info(results_queues)
             tasks = [
                 loop.run_in_executor(queue_fetch_executor, self._read_from_queue, loop, q)
                 for q in results_queues
