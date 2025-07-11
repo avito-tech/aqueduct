@@ -265,6 +265,14 @@ class TestFlow:
         res = await asyncio.gather(*coros)
         assert len(res) == n_tasks
 
+    async def test_process_tasks_concurrent_flow(self, pre_inited_simple_flow):
+        n_tasks = 10
+        pre_inited_simple_flow.start_inited()
+
+        coros = [pre_inited_simple_flow.process(Task()) for _ in range(n_tasks)]
+        res = await asyncio.gather(*coros)
+        assert len(res) == n_tasks
+
     async def test_stopped_flow_due_to_terminated_step_process(self, simple_flow: Flow, caplog):
         """Checks that flow and event loop were stopped when child Step process was terminated."""
         assert simple_flow.state == FlowState.RUNNING

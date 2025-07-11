@@ -23,7 +23,10 @@ from aqueduct.task import BaseTask
 
 
 # it's necessary for correct work on MacOS
-mp.set_start_method('fork')
+try:
+    mp.set_start_method('fork')
+except RuntimeError:
+    pass
 
 
 class SharedCounter:
@@ -197,6 +200,13 @@ async def run_flow(flow: Flow):
 async def simple_flow(loop, sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
     async with run_flow(Flow(*sleep_handlers)) as flow:
         yield flow
+
+
+@pytest.fixture
+async def pre_inited_simple_flow(loop, sleep_handlers: Tuple[SleepHandler, ...]) -> Flow:
+    flow = Flow(*sleep_handlers)
+    flow.pre_init()
+    yield flow
 
 
 @pytest.fixture

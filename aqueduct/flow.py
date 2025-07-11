@@ -10,7 +10,7 @@ from enum import Enum
 from functools import cached_property
 from functools import reduce
 from itertools import chain
-from multiprocessing import Barrier
+from multiprocessing import Barrier, Lock
 from threading import BrokenBarrierError
 from time import monotonic
 from typing import Dict, List, Literal, Optional, Union
@@ -87,6 +87,7 @@ class Flow:
             queue_size: Optional[int] = None,
             queue_priorities: int = 1,
             mp_start_method: Literal['fork', 'spawn', 'forkserver'] = 'fork',
+            concurrency: int = 1,
     ):
         _check_env()
 
@@ -114,6 +115,11 @@ class Flow:
         self._state: FlowState = FlowState.STOPPED
         self._tasks: List[asyncio.Future] = []
 
+        self._concurrency: int = concurrency
+        self._concurrent_index: mp.Value = mp.Value('i', 0)
+        self._init_lock: Lock = Lock()
+        self._flow_id: int = 0
+
     @property
     def state(self):
         return self._state
@@ -135,6 +141,25 @@ class Flow:
         self._state = FlowState.RUNNING
         log.info('Flow was started')
 
+    def pre_init(self, timeout: Optional[int] = None):
+        """
+        Starts Flow workers and waits for all subprocesses to initialize.
+
+        raising FlowError if 'timeout' is set and some handler was not able to initialize in time.
+        """
+        self._run_steps(timeout)
+
+    def start_inited(self):
+        log.info('Flow is starting')
+        self._init_lock.acquire()
+        self._state = FlowState.STARTING
+        self._flow_id = int(self._concurrent_index.value)
+        self._run_tasks()
+        self._state = FlowState.RUNNING
+        self._concurrent_index.value += 1
+        self._init_lock.release()
+        log.info(f'Flow {self._flow_id} was started')
+
     async def process(self, task: BaseTask, timeout_sec: float = 5.) -> bool:
         """
         Starts processing task through pipeline and returns True if all was ok.
@@ -146,8 +171,10 @@ class Flow:
 
         with timeit() as timer:
             future = asyncio.Future()
+            log.info(f'process task {task.task_id}')
             self._task_futures[task.task_id] = future
 
+            task.flow_id = self._flow_id
             task.priority = min(task.priority, self._queue_priorities - 1)
             task.set_timeout(timeout_sec)
             task.metrics.start_transfer_timer(MAIN_PROCESS)
@@ -157,9 +184,13 @@ class Flow:
                 queues=self._queues,
                 task=task,
             )
+            log.info(f'{task.task_id} put to queue {to_queue}')
             while self.state != FlowState.STOPPED and (monotonic() - start_time) < timeout_sec:
                 try:
-                    to_queue.put(task, block=False)
+                    to_queue.put(
+                        task,
+                        block=True if self._concurrency > 1 else False,
+                    )
                 except queue.Full:
                     await asyncio.sleep(0.001)
                 else:
@@ -176,9 +207,11 @@ class Flow:
             # todo is it correct to hide a specific error behind a general FlowError?
             except asyncio.TimeoutError:
                 tasks_stats.timeout += 1
+                log.info(f'timeout {task.task_id}')
                 raise FlowError('Task timeout error')
             except asyncio.CancelledError:
                 tasks_stats.cancel += 1
+                log.info(f'cancell {task.task_id}')
                 if self.state in (FlowState.STOPPING, FlowState.STOPPED):
                     raise FlowError('Task was cancelled')
                 else:
@@ -235,8 +268,8 @@ class Flow:
             return self._queue_size
 
         # queue should be able to store at least 20 task, that's seems reasonable
-        return max(step.batch_size*3, 20)
-    
+        return max(step.batch_size * 3, 20)
+
     async def _check_memory_usage(self, sleep_sec: float = 1.):
         handler_processes_dict = {}
         for step_number, handler in enumerate(self._contexts):
@@ -255,7 +288,7 @@ class Flow:
                 nprocs_memory_sum = 0
                 for process in processes:
                     memory = process.memory_info().rss
-                    nprocs_memory_sum  += memory
+                    nprocs_memory_sum += memory
                     metrics.add(flow_step_name, memory)
                 all_memory_usage += nprocs_memory_sum
                 if len(processes) != 1:
@@ -288,12 +321,13 @@ class Flow:
 
             # Add out queue
             queue_size = self._calc_queue_size(self._steps[-1])
-            queues.append(
-                FlowStepQueue(
-                    queue=TaskMetricsQueue(queue_size),
-                    handle_condition=operator.truth,
+            for out_flow_id in range(self._concurrency):
+                queues.append(
+                    FlowStepQueue(
+                        queue=TaskMetricsQueue(queue_size),
+                        handle_condition=lambda task: task.flow_id == out_flow_id,
+                    )
                 )
-            )
             self._queues.append(queues)
 
         for step_number, step in enumerate(self._steps, 1):
@@ -308,7 +342,10 @@ class Flow:
             )
             self._contexts[step.handler] = start_processes(
                 worker_curr.loop,
-                nprocs=step.nprocs, join=False, daemon=True, start_method=self._mp_start_method,
+                nprocs=step.nprocs,
+                join=False,
+                daemon=True,
+                start_method=self._mp_start_method,
                 args=(start_barrier,),
                 on_start_wait=step.on_start_wait,
             )
@@ -345,7 +382,10 @@ class Flow:
                 to_step = handler.get_step_name(step_number)
                 yield from_step, to_step
                 from_step = to_step
-            yield from_step, MAIN_PROCESS
+            for main_process_id in range(self._concurrency):
+                to_step = MAIN_PROCESS + f'_{main_process_id}' if self._concurrency > 1 else MAIN_PROCESS
+                yield from_step, to_step
+
         result = {}
         for priority in range(self._queue_priorities):
             result.update(
@@ -370,7 +410,7 @@ class Flow:
 
             if task is None:
                 continue
-
+            log.info(f'Received task {task} from queue {q}')
             fut = self._task_futures.get(task.task_id)
             if fut and not fut.cancelled() and not fut.done():
                 task.metrics.stop_transfer_timer(MAIN_PROCESS, task.priority)
@@ -390,8 +430,10 @@ class Flow:
         loop = asyncio.get_event_loop()
         with ThreadPoolExecutor(max_workers=self._queue_priorities) as queue_fetch_executor:
             results_queues = [
-                queues_with_same_priority[-1].queue for queues_with_same_priority in self._queues
+                queues_with_same_priority[self._flow_id - self._concurrency].queue for queues_with_same_priority in
+                self._queues
             ]
+            log.info(results_queues)
             tasks = [
                 loop.run_in_executor(queue_fetch_executor, self._read_from_queue, loop, q)
                 for q in results_queues

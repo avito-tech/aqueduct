@@ -11,6 +11,7 @@ DEFAULT_PRIORITY = 0
 
 class BaseTask(SharedFieldsMixin):
     task_id: Union[str, Sequence[str]] = ''
+    flow_id: int = 0
     priority: int = DEFAULT_PRIORITY
     expiration_time: Optional[float] = None
     metrics: Optional[TaskMetrics] = None
