@@ -1,3 +1,7 @@
+# 1.12.0
+- Precompile atomic module during setup; GCC, `cffi` and `setuptools` are no longer needed at runtime
+- Relax `cffi` and `setuptools` version constraints
+
 # 1.11.7
 - Update `cffi` version to allow python3.12 support, add `setuptools` to requirements
 
