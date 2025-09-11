@@ -5,6 +5,9 @@ __pycache__
 build/
 dist/
 
+# CFFI
+/aqueduct/shm/_atomic.*
+
 # IDE
 .idea
 
