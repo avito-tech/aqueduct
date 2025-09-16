@@ -30,16 +30,16 @@ class TestServer(FlowSocketServer):
 @pytest.fixture
 def flow_server() -> TestServer:
     return TestServer(
-        build_task=lambda data: Task(),
-        extract_result=lambda task: {'result': task.result},
+        build_task=lambda data: [Task()],
+        extract_result=lambda tasks: {'result_data': tasks[0].result},
     )
 
 
 async def test_sockets(flow_server: TestServer):
     flow_server_proc = Process(target=flow_server.start, daemon=False)
-    flow_server.start()
+    flow_server_proc.start()
     await asyncio.sleep(0.5)
     pool = SocketConnectionPool()
     result = await pool.handle('some data')
-    assert result == {'result': 'done'}
+    assert result == {'ok': True, 'result': {'result_data': 'done'}}
     flow_server_proc.terminate()
