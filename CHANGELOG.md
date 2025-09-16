@@ -1,3 +1,6 @@
+# 1.12.0
+- Add socket transport to support concurrent web workers compatibility with 1 Flow instance
+
 # 1.11.7
 - Update `cffi` version to allow python3.12 support, add `setuptools` to requirements
 
