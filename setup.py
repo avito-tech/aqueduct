@@ -5,10 +5,13 @@ with open('README.rst') as f:
 
 packages = ['aqueduct']
 
+required_setup = [
+    'cffi>=1.13.0,<2.0.0',
+    'setuptools>=42.0.0,<81.0.0',
+]
+
 required = [
-    'cffi==1.16.0',
     'psutil==5.9.4',
-    'setuptools==70.2.0',
 ]
 
 extras = {
@@ -51,7 +54,8 @@ setup(
         'Operating System :: Unix',
         'Operating System :: OS Independent',
     ],
-    setup_requires=required,
+    cffi_modules=["atomic_build.py:ffibuilder"],
+    setup_requires=required_setup,
     install_requires=required,
     extras_require=extras,
 )

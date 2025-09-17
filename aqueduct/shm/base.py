@@ -18,39 +18,14 @@ from abc import (
     abstractmethod,
 )
 
-from cffi import FFI
-
 try:
     from multiprocessing import shared_memory
 except ImportError:
     raise ImportError('shared_memory module is available since python3.8')
 from typing import Any
 
-
-ffi = FFI()
-
-ffi.cdef("""
-uint32_t load_uint32(uint32_t *v);
-void store_uint32(uint32_t *v, uint32_t n);
-uint32_t add_and_fetch_uint32(uint32_t *v, uint32_t i);
-uint32_t sub_and_fetch_uint32(uint32_t *v, uint32_t i);
-""")
-
-atomic = ffi.verify("""
-uint32_t load_uint32(uint32_t *v) {
-    return __atomic_load_n(v, __ATOMIC_SEQ_CST);
-};
-void store_uint32(uint32_t *v, uint32_t n) {
-    uint32_t i = n;
-    __atomic_store(v, &i, __ATOMIC_SEQ_CST);
-};
-uint32_t add_and_fetch_uint32(uint32_t *v, uint32_t i) {
-    return __atomic_add_fetch(v, i, __ATOMIC_SEQ_CST);
-};
-uint32_t sub_and_fetch_uint32(uint32_t *v, uint32_t i) {
-    return __atomic_sub_fetch(v, i, __ATOMIC_SEQ_CST);
-};
-""")
+from ._atomic import ffi
+from ._atomic.lib import load_uint32, store_uint32, add_and_fetch_uint32, sub_and_fetch_uint32
 
 
 class AtomicCounter:
@@ -58,16 +33,16 @@ class AtomicCounter:
         self._ptr = ffi.cast('uint32_t*', ffi.from_buffer(view[:self.size()]))
 
     def get(self):
-        return atomic.load_uint32(self._ptr)
+        return load_uint32(self._ptr)
 
     def set(self, n):
-        return atomic.store_uint32(self._ptr, n)
+        return store_uint32(self._ptr, n)
 
     def inc(self):
-        return atomic.add_and_fetch_uint32(self._ptr, 1)
+        return add_and_fetch_uint32(self._ptr, 1)
 
     def dec(self):
-        return atomic.sub_and_fetch_uint32(self._ptr, 1)
+        return sub_and_fetch_uint32(self._ptr, 1)
 
     @staticmethod
     def size():
