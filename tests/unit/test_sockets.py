@@ -1,13 +1,15 @@
 import asyncio
 from multiprocessing import Process
+from typing import Any
 
 import pytest
 
 from aqueduct.flow import Flow, FlowStep
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.sockets.connection_pool import SocketConnectionPool
+from aqueduct.sockets.protocol import SocketResponse
 from aqueduct.task import BaseTask
-from aqueduct.sockets.flow_server import FlowSocketServer
+from aqueduct.sockets.flow_server import BaseFlowBuilder, FlowSocketServer
 
 
 class Task(BaseTask):
@@ -22,24 +24,29 @@ class SimpleHandler(BaseTaskHandler):
             task.result = 'done'
 
 
-class TestServer(FlowSocketServer):
-    async def _build_flow(self) -> Flow:
+class FlowBuilder(BaseFlowBuilder):
+    async def build_flow(self) -> Flow:
         return Flow(FlowStep(SimpleHandler()))
+
+    def build_tasks(self, payload: Any) -> list[BaseTask]:
+        return [Task()]
+
+    def extract_result(self, tasks: list[BaseTask]) -> Any:
+        return {'result_data': tasks[0].result}
 
 
 @pytest.fixture
-def flow_server() -> TestServer:
-    return TestServer(
-        build_task=lambda data: [Task()],
-        extract_result=lambda tasks: {'result_data': tasks[0].result},
+def flow_server() -> FlowSocketServer:
+    return FlowSocketServer(
+        flow_builder=FlowBuilder(),
     )
 
 
-async def test_sockets(flow_server: TestServer):
+async def test_sockets(flow_server: FlowSocketServer):
     flow_server_proc = Process(target=flow_server.start, daemon=False)
     flow_server_proc.start()
     await asyncio.sleep(0.5)
     pool = SocketConnectionPool()
     result = await pool.handle('some data')
-    assert result == {'ok': True, 'result': {'result_data': 'done'}}
+    assert result == SocketResponse(ok= True, result={'result_data': 'done'})
     flow_server_proc.terminate()

@@ -1,4 +1,13 @@
 from asyncio import StreamReader, StreamWriter
+from dataclasses import dataclass
+from typing import Any, Optional
+
+
+@dataclass(slots=True)
+class SocketResponse:
+    ok: bool = False
+    result: Any = None
+    error: Optional[str] = None
 
 
 class SocketProtocol:

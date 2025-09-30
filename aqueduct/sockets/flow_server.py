@@ -4,26 +4,44 @@ import pickle
 import signal
 from abc import ABC, abstractmethod
 from contextlib import suppress
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
-from .protocol import SocketProtocol
+from .protocol import SocketProtocol, SocketResponse
 from ..flow import Flow
 from ..logger import log
+from ..task import BaseTask
 
 
-class FlowSocketServer(SocketProtocol, ABC):
+class BaseFlowBuilder(ABC):
+    @abstractmethod
+    async def build_flow(self) -> Flow:
+        """Factory method to build Flow for socket server."""
+        pass
+
+    @abstractmethod
+    def build_tasks(self, payload: Any) -> list[BaseTask]:
+        """Factory method to build user defined Tasks for socket server Flow."""
+        pass
+
+    @abstractmethod
+    def extract_result(self, tasks: list[BaseTask]) -> Any:
+        """Factory method to extract result from user defined Tasks."""
+        pass
+
+
+class FlowSocketServer(SocketProtocol):
     def __init__(
         self,
-        build_task: Callable[[Any], Any],
-        extract_result: Callable[[Any], Any],
+        flow_builder: BaseFlowBuilder,
         socket_path: str = '/tmp/flow.sock',
         process_timeout_sec: float = 1,
         connection_idle_timeout_sec: int = 900,
+        backlog_size: int = 4096,
     ) -> None:
-        self._build_task = build_task
-        self._extract_result = extract_result
+        self._flow_builder = flow_builder
         self._process_timeout_sec = process_timeout_sec
         self._connection_idle_timeout_sec = connection_idle_timeout_sec
+        self._backlog_size = backlog_size
 
         self._socket_path = socket_path
         self._server: Optional[asyncio.base_events.Server] = None
@@ -37,13 +55,13 @@ class FlowSocketServer(SocketProtocol, ABC):
         with suppress(FileNotFoundError):
             os.unlink(self._socket_path)
 
-        self._flow = await self._build_flow()
+        self._flow = await self._flow_builder.build_flow()
         assert self._flow is not None
         self._flow.start()
         self._server = await asyncio.start_unix_server(
             self._handle_client,
             path=self._socket_path,
-            backlog=4096,
+            backlog=self._backlog_size,
         )
 
         loop = asyncio.get_running_loop()
@@ -62,10 +80,6 @@ class FlowSocketServer(SocketProtocol, ABC):
         with suppress(FileNotFoundError):
             os.unlink(self._socket_path)
 
-    @abstractmethod
-    async def _build_flow(self) -> Flow:
-        pass
-
     async def _handle_client(
         self,
         reader: asyncio.StreamReader,
@@ -79,7 +93,7 @@ class FlowSocketServer(SocketProtocol, ABC):
                         timeout=self._connection_idle_timeout_sec,
                     )
                     payload = pickle.loads(payload_bytes)
-                    tasks = self._build_task(payload)
+                    tasks = self._flow_builder.build_tasks(payload)
                     assert self._flow
                     try:
                         await asyncio.gather(
@@ -89,22 +103,32 @@ class FlowSocketServer(SocketProtocol, ABC):
                             ),
                             return_exceptions=True,
                         )
-                        resp = {'ok': True, 'result': self._extract_result(tasks)}
+                        resp = SocketResponse(
+                            ok=True,
+                            result=self._flow_builder.extract_result(tasks),
+                        )
                     except Exception:
-                        log.exception('Exception while processing task')
-                        resp = {'ok': False, 'error': 'process error'}
+                        log.exception('Flow error while processing task')
+                        resp = SocketResponse(
+                            ok=False,
+                            error='flow error',
+                        )
                 except asyncio.TimeoutError:
                     break  # idle connection
                 except asyncio.IncompleteReadError:
                     break  # connection closed by client
                 except Exception:
                     log.exception('Exception while handling client connection')
-                    resp = {'ok': False, 'error': 'socket error'}
+                    resp = SocketResponse(
+                        ok=False,
+                        error='socket error',
+                    )
                 try:
                     await self._write_msg(
                         writer, pickle.dumps(resp, protocol=pickle.HIGHEST_PROTOCOL)
                     )
                 except Exception:
+                    log.exception('Server write error')
                     break
         finally:
             with suppress(Exception):

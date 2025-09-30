@@ -2,7 +2,7 @@ import asyncio
 import pickle
 from typing import Optional
 
-from .protocol import SocketProtocol
+from .protocol import SocketProtocol, SocketResponse
 from ..logger import log
 
 RETRYABLE_EXCEPTIONS = (ConnectionResetError, BrokenPipeError, asyncio.IncompleteReadError)
@@ -51,7 +51,7 @@ class SocketConnectionPool(SocketProtocol):
                 timeout=timeout,
             )
         except Exception:
-            log.info('failed to open connection')
+            log.exception('failed to open connection')
             return None
 
     async def _close_connection(
@@ -78,7 +78,7 @@ class SocketConnectionPool(SocketProtocol):
                 raise
         return None
 
-    async def _handle(self, data: dict) -> Optional[dict]:
+    async def _handle(self, data: dict) -> Optional[SocketResponse]:
         rw = await self._acquire_connection()
         if rw is None:
             log.warning('connection pool is empty')
