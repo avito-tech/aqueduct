@@ -1,14 +1,32 @@
 import asyncio
 import pickle
+from contextlib import suppress
 from typing import Optional
 
+from .flow_server import SOCKET_ERROR
 from .protocol import SocketProtocol, SocketResponse
+from .. import BaseTask
 from ..logger import log
 
-RETRYABLE_EXCEPTIONS = (ConnectionResetError, BrokenPipeError, asyncio.IncompleteReadError)
+
+class OpenConnectionError(Exception):
+    pass
+
+
+class SocketServerError(Exception):
+    pass
 
 
 class SocketConnectionPool(SocketProtocol):
+    RETRYABLE_EXCEPTIONS = (
+        OpenConnectionError,
+        SocketServerError,
+        ConnectionResetError,
+        BrokenPipeError,
+        asyncio.IncompleteReadError,
+        asyncio.TimeoutError,
+    )
+
     def __init__(
         self,
         socket_path: str = '/tmp/flow.sock',
@@ -33,7 +51,9 @@ class SocketConnectionPool(SocketProtocol):
             return
         async with self._init_lock:
             for _ in range(self._size):
-                if rw := await self._open_connection(self._connect_timeout):
+                # if failed to connect it would connect later lazily
+                with suppress(OpenConnectionError):
+                    rw = await self._open_connection(self._connect_timeout)
                     await self._pool.put(rw)
             self._inited = True
 
@@ -44,53 +64,56 @@ class SocketConnectionPool(SocketProtocol):
     async def _open_connection(
         self,
         timeout: float,
-    ) -> Optional[tuple[asyncio.StreamReader, asyncio.StreamWriter]]:
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         try:
             return await asyncio.wait_for(
                 asyncio.open_unix_connection(self._path),
                 timeout=timeout,
             )
-        except Exception:
-            log.exception('failed to open connection')
-            return None
+        except Exception as e:
+            raise OpenConnectionError('failed to open connection') from e
 
     async def _close_connection(
         self,
         rw: tuple[asyncio.StreamReader, asyncio.StreamWriter],
     ) -> None:
         _, writer = rw
-        try:
+
+        # connections close while shutting down or removing from pool.
+        # Idle connections are closed on server side so we can ignore failures
+        with suppress(Exception):
             writer.close()
             await writer.wait_closed()
-        except Exception:
-            pass
 
 
-    async def handle(self, data: dict) -> Optional[dict]:
+    async def send(self, data: list[BaseTask]) -> Optional[SocketResponse]:
         tries = 0
         while tries < self._connection_retries:
             try:
-                return await self._handle(data)
-            except RETRYABLE_EXCEPTIONS:
                 tries += 1
+                return await self._send(data)
+            except self.RETRYABLE_EXCEPTIONS:
+                if tries == self._connection_retries:
+                    log.exception('sending data to socket failed')
+                    raise
             except Exception:
                 log.exception('connection pool broken')
                 raise
-        return None
 
-    async def _handle(self, data: dict) -> Optional[SocketResponse]:
+    async def _send(self, data: list[BaseTask]) -> SocketResponse:
         rw = await self._acquire_connection()
-        if rw is None:
-            log.warning('connection pool is empty')
-            return None
         reader, writer = rw
         broken = False
         try:
             await self._write_msg(writer, pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL))
 
             resp = await asyncio.wait_for(self._read_msg(reader), timeout=self._read_timeout)
-            return pickle.loads(resp)
+            resp_model: SocketResponse = pickle.loads(resp)
+            if resp_model.error == SOCKET_ERROR:
+                raise SocketServerError
+            return resp_model
         except Exception:
+            # mark connection to be removed from pool
             broken = True
             raise
         finally:
@@ -98,7 +121,7 @@ class SocketConnectionPool(SocketProtocol):
 
     async def _acquire_connection(
         self,
-    ) -> Optional[tuple[asyncio.StreamReader, asyncio.StreamWriter]]:
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         try:
             return await asyncio.wait_for(self._pool.get(), timeout=self._connect_timeout)
         except asyncio.TimeoutError:

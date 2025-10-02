@@ -1,13 +1,13 @@
 import asyncio
+import os
+import signal
 from multiprocessing import Process
-from typing import Any
 
 import pytest
 
 from aqueduct.flow import Flow, FlowStep
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.sockets.connection_pool import SocketConnectionPool
-from aqueduct.sockets.protocol import SocketResponse
 from aqueduct.task import BaseTask
 from aqueduct.sockets.flow_server import BaseFlowBuilder, FlowSocketServer
 
@@ -28,12 +28,6 @@ class FlowBuilder(BaseFlowBuilder):
     async def build_flow(self) -> Flow:
         return Flow(FlowStep(SimpleHandler()))
 
-    def build_tasks(self, payload: Any) -> list[BaseTask]:
-        return [Task()]
-
-    def extract_result(self, tasks: list[BaseTask]) -> Any:
-        return {'result_data': tasks[0].result}
-
 
 @pytest.fixture
 def flow_server() -> FlowSocketServer:
@@ -47,6 +41,8 @@ async def test_sockets(flow_server: FlowSocketServer):
     flow_server_proc.start()
     await asyncio.sleep(0.5)
     pool = SocketConnectionPool()
-    result = await pool.handle('some data')
-    assert result == SocketResponse(ok= True, result={'result_data': 'done'})
-    flow_server_proc.terminate()
+    result = await pool.send([Task()])
+    os.kill(flow_server_proc.pid, signal.SIGINT)
+    assert result.ok == True
+    assert len(result.result) == 1
+    assert result.result[0].result == 'done'

@@ -1,12 +1,14 @@
 from asyncio import StreamReader, StreamWriter
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Optional
+
+from ..task import BaseTask
 
 
 @dataclass(slots=True)
 class SocketResponse:
     ok: bool = False
-    result: Any = None
+    result: list[BaseTask] = field(default_factory=list)
     error: Optional[str] = None
 
 

@@ -4,28 +4,21 @@ import pickle
 import signal
 from abc import ABC, abstractmethod
 from contextlib import suppress
-from typing import Any, Optional
+from typing import Optional
 
 from .protocol import SocketProtocol, SocketResponse
+from .. import BaseTask
 from ..flow import Flow
 from ..logger import log
-from ..task import BaseTask
+
+SOCKET_ERROR = 'socket_error'
+FLOW_ERROR = 'flow_error'
 
 
 class BaseFlowBuilder(ABC):
     @abstractmethod
     async def build_flow(self) -> Flow:
         """Factory method to build Flow for socket server."""
-        pass
-
-    @abstractmethod
-    def build_tasks(self, payload: Any) -> list[BaseTask]:
-        """Factory method to build user defined Tasks for socket server Flow."""
-        pass
-
-    @abstractmethod
-    def extract_result(self, tasks: list[BaseTask]) -> Any:
-        """Factory method to extract result from user defined Tasks."""
         pass
 
 
@@ -92,8 +85,7 @@ class FlowSocketServer(SocketProtocol):
                         self._read_msg(reader),
                         timeout=self._connection_idle_timeout_sec,
                     )
-                    payload = pickle.loads(payload_bytes)
-                    tasks = self._flow_builder.build_tasks(payload)
+                    tasks: list[BaseTask] = pickle.loads(payload_bytes)
                     assert self._flow
                     try:
                         await asyncio.gather(
@@ -105,29 +97,32 @@ class FlowSocketServer(SocketProtocol):
                         )
                         resp = SocketResponse(
                             ok=True,
-                            result=self._flow_builder.extract_result(tasks),
+                            result=tasks,
                         )
                     except Exception:
                         log.exception('Flow error while processing task')
                         resp = SocketResponse(
                             ok=False,
-                            error='flow error',
+                            error=FLOW_ERROR,
                         )
                 except asyncio.TimeoutError:
-                    break  # idle connection
+                    break  # Close idle connection
                 except asyncio.IncompleteReadError:
                     break  # connection closed by client
                 except Exception:
+                    # Something went wrong. Notify client or close connection if broken.
                     log.exception('Exception while handling client connection')
                     resp = SocketResponse(
                         ok=False,
-                        error='socket error',
+                        error=SOCKET_ERROR,
                     )
                 try:
                     await self._write_msg(
                         writer, pickle.dumps(resp, protocol=pickle.HIGHEST_PROTOCOL)
                     )
                 except Exception:
+                    # Close broken connection.
+                    # Client will retry with new one after timeout.
                     log.exception('Server write error')
                     break
         finally:
