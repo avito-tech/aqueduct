@@ -1,5 +1,4 @@
 import uuid
-from dataclasses import dataclass
 from time import monotonic
 from typing import Sequence, Set, Union, Optional
 
@@ -10,7 +9,6 @@ from .shm import SharedFieldsMixin
 DEFAULT_PRIORITY = 0
 
 
-@dataclass
 class BaseTask(SharedFieldsMixin):
     task_id: Union[str, Sequence[str]] = ''
     priority: int = DEFAULT_PRIORITY
@@ -69,6 +67,5 @@ class BaseTask(SharedFieldsMixin):
                 setattr(self, field, value)
 
 
-@dataclass
 class StopTask(BaseTask):
     """Task for graceful shutdown."""

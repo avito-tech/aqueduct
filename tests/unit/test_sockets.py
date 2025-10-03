@@ -68,21 +68,6 @@ async def test_sockets(simple_flow: Flow):
         os.kill(p.pid, signal.SIGKILL)
 
 
-async def test_socket_flow(simple_flow: Flow):
-    flow = SocketFlow()
-    flow_server_proc_ctx = flow.preload(simple_flow)
-    await flow.start()
-
-    task = Task()
-    res = await flow.process([task])
-    assert res is True
-    assert task.result == 'done'
-
-    await flow.stop()
-    for p in flow_server_proc_ctx.processes:
-        os.kill(p.pid, signal.SIGKILL)
-
-
 async def test_shm_task_sockets(shm_flow: Flow, array):
     shm_flow.init_processes(None)
     flow_server = FlowSocketServer(shm_flow)
@@ -100,5 +85,20 @@ async def test_shm_task_sockets(shm_flow: Flow, array):
     assert result[0].array[0] == 2
 
     await pool.close()
+    for p in flow_server_proc_ctx.processes:
+        os.kill(p.pid, signal.SIGKILL)
+
+
+async def test_socket_flow(simple_flow: Flow):
+    flow = SocketFlow()
+    flow_server_proc_ctx = flow.preload(simple_flow)
+    await flow.start()
+
+    task = Task()
+    res = await flow.process([task])
+    assert res is True
+    assert task.result == 'done'
+
+    await flow.stop()
     for p in flow_server_proc_ctx.processes:
         os.kill(p.pid, signal.SIGKILL)
