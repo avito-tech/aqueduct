@@ -5,7 +5,7 @@ from typing import Optional
 from ..task import BaseTask
 
 
-@dataclass(slots=True)
+@dataclass
 class SocketResponse:
     ok: bool = False
     result: list[BaseTask] = field(default_factory=list)
