@@ -2,17 +2,27 @@ Web concurrency example
 #######################
 
 If you use aqueduct in web service, you may need to scale your service with web workers concurrency.
+
 Usually the reason to use concurrency is main process bottle neck (i.e.: main process handles http requests, manages serialization/deserialization, data validation and convertion. When you use aqueduct it also manages aqueduct Flow instance and its utility functionality)
+
 When you enable concurrency usually your scenario is to have multiple web concurrent workers and single `aqueduct.Flow` instance.
+
 For this scenario we suggest to use `gunicorn` with `preload app` feature and stand alone process which communicates with web workers by Unix Domain Sockets and manages single Flow instance.
+
 It handles tasks from all the workers. Here is the scheme:
 
 
 .. image:: socket_scheme.png
-   :alt: Scheme
+   :alt: New Scheme
    :width: 600px
    :align: center
 
+Old scheme:
+
+.. image:: no_socket_scheme.png
+   :alt: Old Scheme
+   :width: 600px
+   :align: center
 
 
 Implementation manual
