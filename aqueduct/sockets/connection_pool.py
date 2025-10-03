@@ -3,9 +3,10 @@ import pickle
 from contextlib import suppress
 from typing import Optional
 
-from .flow_server import SOCKET_ERROR
+from .flow_server import SOCKET_ERROR, FLOW_ERROR
 from .protocol import SocketProtocol, SocketResponse
 from .. import BaseTask
+from ..exceptions import FlowError
 from ..logger import log
 
 
@@ -86,12 +87,12 @@ class SocketConnectionPool(SocketProtocol):
             await writer.wait_closed()
 
 
-    async def send(self, data: list[BaseTask]) -> Optional[SocketResponse]:
+    async def handle(self, data: list[BaseTask]) -> list[BaseTask]:
         tries = 0
         while tries < self._connection_retries:
             try:
                 tries += 1
-                return await self._send(data)
+                return await self._handle(data)
             except self.RETRYABLE_EXCEPTIONS:
                 if tries == self._connection_retries:
                     log.exception('sending data to socket failed')
@@ -100,7 +101,7 @@ class SocketConnectionPool(SocketProtocol):
                 log.exception('connection pool broken')
                 raise
 
-    async def _send(self, data: list[BaseTask]) -> SocketResponse:
+    async def _handle(self, data: list[BaseTask]) -> list[BaseTask]:
         rw = await self._acquire_connection()
         reader, writer = rw
         broken = False
@@ -111,7 +112,9 @@ class SocketConnectionPool(SocketProtocol):
             resp_model: SocketResponse = pickle.loads(resp)
             if resp_model.error == SOCKET_ERROR:
                 raise SocketServerError
-            return resp_model
+            if resp_model.error == FLOW_ERROR:
+                raise FlowError
+            return resp_model.result
         except Exception:
             # mark connection to be removed from pool
             broken = True
