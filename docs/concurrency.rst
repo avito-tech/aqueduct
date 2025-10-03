@@ -1,23 +1,22 @@
-Web concurrency example
+Web Concurrency Example
 #######################
 
-If you use aqueduct in web service, you may need to scale your service with web workers concurrency.
+When building a web service with Aqueduct, you may need to scale your application by running multiple concurrent web workers.
 
-Usually the reason to use concurrency is main process bottle neck (i.e.: main process handles http requests, manages serialization/deserialization, data validation and convertion. When you use aqueduct it also manages aqueduct Flow instance and its utility functionality)
+The main motivation for enabling concurrency is to avoid bottlenecks in the main process. Typically, the main process is responsible for handling HTTP requests, managing serialization and deserialization, performing data validation and conversion, and, when using Aqueduct, running the Flow instance along with its utility functions.
 
-When you enable concurrency usually your scenario is to have multiple web concurrent workers and single `aqueduct.Flow` instance.
+To improve scalability, a common setup is to run multiple concurrent web workers sharing a single aqueduct.Flow instance.
 
-For this scenario we suggest to use `gunicorn` with `preload app` feature and stand alone process which communicates with web workers by Unix Domain Sockets and manages single Flow instance.
+For this scenario, we recommend using Gunicorn with the preload_app feature, combined with a standalone process that manages a single Flow instance. The web workers communicate with this process via Unix Domain Sockets.
 
-It handles tasks from all the workers. Here is the scheme:
-
+This standalone Flow process handles tasks from all workers. The diagram below illustrates the difference:
 
 .. image:: socket_scheme.png
    :alt: New Scheme
    :width: 600px
    :align: center
 
-Old scheme:
+Old scheme (without a dedicated Flow process):
 
 .. image:: no_socket_scheme.png
    :alt: Old Scheme
@@ -25,28 +24,32 @@ Old scheme:
    :align: center
 
 
-Implementation manual
----------------------
+Implementation Guide
+-------------------
 
-Concurrency example with `gunicorn` + `FastAPI`
+Concurrency with Gunicorn + FastAPI
 
-Here are steps to add concurrency to your service with aqueduct:
+Follow these steps to enable concurrency in your Aqueduct-based service:
 
 
-1. Install gunicorn (add to your project dependencies)
- `Guide <https://docs.gunicorn.org/en/latest/install.html>`__
+1. Install Gunicorn (and Uvicorn workers)
+=========================================
 
- As an example we use `uvicorn` workers for gunicorn so if you follow the example you should also install uvicorn
+ Add Gunicorn to your project dependencies.
+ See the official installation `guide<https://docs.gunicorn.org/en/latest/install.html>`__.
 
-.. code-block:: bash
+ Since this example uses Uvicorn workers for Gunicorn, also install Uvicorn:
+
+ .. code-block:: bash
 
     pip install uvicorn
 
 2. Refactor your app to use SocketFlow
+======================================
 
- Let's look at basic example
+ Let’s start with a basic example.
 
- Let's say we have `flow.py`:
+ `flow.py`:
 
  .. code-block:: python
 
@@ -74,7 +77,7 @@ Here are steps to add concurrency to your service with aqueduct:
             ),
         )
 
- And `main.py`:
+ Original main.py using a standard Flow:
 
  .. code-block:: python
 
@@ -89,8 +92,8 @@ Here are steps to add concurrency to your service with aqueduct:
 
     mp_flow = build_flow()
 
-    # start Flow
-    # initialize flow step processes. Initialize Flow utility (metrics, result awaiting, etc.)
+    # Start Flow
+    # Initialize flow step processes. Initialize Flow utility (metrics, result awaiting, etc.)
     app = FastAPI(on_startup=[mp_flow.start])
 
 
@@ -101,13 +104,12 @@ Here are steps to add concurrency to your service with aqueduct:
     @app.get('/get_result')
     async def get_result() -> GetResultResponse:
         task = Task()
-        print(task.result)  # ''(None)
+        print(task.result)  # None
         await mp_flow.process(task)
         print(task.result)  # 'done'
         return GetResultResponse(result=task.result)
 
-
- All you need is to use SocketFlow wrapper instead of default Flow object. New `main.py` (`flow.py` is unchanged):
+ Now simply replace the Flow with SocketFlow which is compatible with concurrency in "single-instance" mode:
 
  .. code-block:: python
 
@@ -122,8 +124,8 @@ Here are steps to add concurrency to your service with aqueduct:
 
     socket_flow = SocketFlow()
 
-    # start SocketFlow wrapper
-    # initialize socket connection pool to communicate with flow socket server
+    # Start SocketFlow wrapper
+    # Initialize socket connection pool to communicate with flow socket server
     app = FastAPI(on_startup=[socket_flow.start])
 
 
@@ -134,26 +136,23 @@ Here are steps to add concurrency to your service with aqueduct:
     @app.get('/get_result')
     async def get_result() -> GetResultResponse:
         task = Task()
-        print(task.result)  # ''(None)
-        await socket_flow.process([task])  # wrapper processes list of tasks to send batch via socket
+        print(task.result)  # None
+        await socket_flow.process([task])  # Send batch of tasks via socket
         print(task.result)  # 'done'
         return GetResultResponse(result=task.result)
 
-3. Define gunicorn config with preload-app option
+3. Define Gunicorn config with `preload_app` flag
 
- The key is gunicorn initialize service objects in gunicorn main process (which is parent process for all web workers where http requests are handled).
+ The key is to initialize the Flow once, in the Gunicorn master process.
+ This way, Gunicorn spawns web workers via fork, and all business logic objects created during the preload stage are shared across workers thanks to the Copy-on-Write mechanism.
 
- So we can spawn our stand alone process with Flow here and it happens only once.
+ See:
+  * `About preload_app<https://docs.gunicorn.org/en/stable/settings.html#preload-app>`__
+  * `About on_starting hook<https://docs.gunicorn.org/en/21.2.0/settings.html#on-starting>`__
 
- Also gunicorn spawns web worker processes with `fork` method so all the business logic objects which we initialize in preload stage are initialized only once because of Copy-on-Write mechanism.
+ gunicorn_config.py:
 
- `About preload app <https://docs.gunicorn.org/en/stable/settings.html#preload-app>`__
-
- `About on_starting hook <https://docs.gunicorn.org/en/21.2.0/settings.html#on-starting>`__
-
- `gunicorn_config.py` file:
-
-.. code-block:: python
+ .. code-block:: python
 
     import os
     import signal
@@ -172,8 +171,7 @@ Here are steps to add concurrency to your service with aqueduct:
 
     def on_starting(server):
         global flow_socket_server_proc_ctx
-
-        # initialize flow steps and flow socket server processes only once.
+        # Initialize Flow steps and Flow socket server with its steps only once
         flow_socket_server_proc_ctx = socket_flow.preload(build_flow())
 
 
@@ -186,15 +184,13 @@ Here are steps to add concurrency to your service with aqueduct:
 Run example
 -----------
 
-Now you can try to run your service
-
-Old run command:
+Old command:
 
 .. code-block:: bash
 
     uvicorn main:app
 
-New run command:
+New command:
 
 .. code-block:: bash
 
