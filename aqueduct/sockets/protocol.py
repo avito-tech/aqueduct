@@ -1,6 +1,6 @@
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import List, Optional
 
 from ..task import BaseTask
 
@@ -8,7 +8,7 @@ from ..task import BaseTask
 @dataclass
 class SocketResponse:
     ok: bool = False
-    result: list[BaseTask] = field(default_factory=list)
+    result: List[BaseTask] = field(default_factory=list)
     error: Optional[str] = None
 
 

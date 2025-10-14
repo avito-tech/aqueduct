@@ -3,7 +3,7 @@ import os
 import pickle
 import signal
 from contextlib import suppress
-from typing import Optional
+from typing import Optional, List
 
 from .protocol import SocketProtocol, SocketResponse
 from .. import BaseTask
@@ -41,7 +41,10 @@ class FlowSocketServer(SocketProtocol):
         with suppress(FileNotFoundError):
             os.unlink(self._socket_path)
 
+        log.debug(f'[FlowServer] starting flow')
         self._flow.start_inited()
+        log.debug(f'[FlowServer] flow started')
+        log.debug(f'[FlowServer] starting server')
         self._flow._state = FlowState.RUNNING
         self._server = await asyncio.start_unix_server(
             self._handle_client,
@@ -55,6 +58,7 @@ class FlowSocketServer(SocketProtocol):
 
         async with self._server:
             await self._closing.wait()
+        log.debug(f'[FlowServer] server started')
 
     async def close(self) -> None:
         self._closing.set()
@@ -77,7 +81,7 @@ class FlowSocketServer(SocketProtocol):
                         self._read_msg(reader),
                         timeout=self._connection_idle_timeout_sec,
                     )
-                    tasks: list[BaseTask] = pickle.loads(payload_bytes)
+                    tasks: List[BaseTask] = pickle.loads(payload_bytes)
                     assert self._flow
                     try:
                         await asyncio.gather(

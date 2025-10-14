@@ -1,7 +1,7 @@
 import asyncio
 import pickle
 from contextlib import suppress
-from typing import Optional
+from typing import List, Tuple
 
 from .flow_server import SOCKET_ERROR, FLOW_ERROR
 from .protocol import SocketProtocol, SocketResponse
@@ -40,7 +40,7 @@ class SocketConnectionPool(SocketProtocol):
         self._size = size
         self._connect_timeout = connect_timeout_sec
         self._read_timeout = read_timeout_sec
-        self._pool: asyncio.Queue[tuple[asyncio.StreamReader, asyncio.StreamWriter]] = (
+        self._pool: asyncio.Queue[Tuple[asyncio.StreamReader, asyncio.StreamWriter]] = (
             asyncio.Queue()
         )
         self._connection_retries = connection_retries
@@ -65,7 +65,7 @@ class SocketConnectionPool(SocketProtocol):
     async def _open_connection(
         self,
         timeout: float,
-    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         try:
             return await asyncio.wait_for(
                 asyncio.open_unix_connection(self._path),
@@ -76,7 +76,7 @@ class SocketConnectionPool(SocketProtocol):
 
     async def _close_connection(
         self,
-        rw: tuple[asyncio.StreamReader, asyncio.StreamWriter],
+        rw: Tuple[asyncio.StreamReader, asyncio.StreamWriter],
     ) -> None:
         _, writer = rw
 
@@ -87,7 +87,7 @@ class SocketConnectionPool(SocketProtocol):
             await writer.wait_closed()
 
 
-    async def handle(self, data: list[BaseTask]) -> list[BaseTask]:
+    async def handle(self, data: List[BaseTask]) -> List[BaseTask]:
         tries = 0
         while tries < self._connection_retries:
             try:
@@ -101,7 +101,7 @@ class SocketConnectionPool(SocketProtocol):
                 log.exception('connection pool broken')
                 raise
 
-    async def _handle(self, data: list[BaseTask]) -> list[BaseTask]:
+    async def _handle(self, data: List[BaseTask]) -> List[BaseTask]:
         rw = await self._acquire_connection()
         reader, writer = rw
         broken = False
@@ -124,7 +124,7 @@ class SocketConnectionPool(SocketProtocol):
 
     async def _acquire_connection(
         self,
-    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         try:
             return await asyncio.wait_for(self._pool.get(), timeout=self._connect_timeout)
         except asyncio.TimeoutError:
@@ -132,7 +132,7 @@ class SocketConnectionPool(SocketProtocol):
 
     async def _release_connection(
         self,
-        rw: tuple[asyncio.StreamReader, asyncio.StreamWriter],
+        rw: Tuple[asyncio.StreamReader, asyncio.StreamWriter],
         broken: bool = False,
     ) -> None:
         if broken or rw[1].is_closing():

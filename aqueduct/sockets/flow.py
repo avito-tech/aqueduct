@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import Optional
+from typing import List, Optional
 
 from .connection_pool import SocketConnectionPool
 from .flow_server import FlowSocketServer
@@ -49,7 +49,7 @@ class SocketFlow:
         if self._pool is not None:
             await self._pool.close()
 
-    async def process(self, tasks: list[BaseTask], timeout_sec: float = 5.) -> bool:
+    async def process(self, tasks: List[BaseTask], timeout_sec: float = 5.) -> bool:
         if self._pool is None:
             raise RuntimeError('Connection pool is not initialized. Call SocketFlow.start method')
         result_tasks = await asyncio.wait_for(
