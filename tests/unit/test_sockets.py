@@ -11,6 +11,7 @@ from aqueduct.sockets.connection_pool import SocketConnectionPool
 from aqueduct.sockets.flow import SocketFlow
 from aqueduct.task import BaseTask
 from aqueduct.sockets.flow_server import FlowSocketServer
+from tests.conftest import only_py310
 
 
 class Task(BaseTask):
@@ -47,8 +48,9 @@ def shm_flow() -> Flow:
     return Flow(FlowStep(ChangeFieldHandler()))
 
 
+@only_py310
 async def test_sockets(simple_flow: Flow):
-    simple_flow.init_processes(None)
+    simple_flow.init_processes()
     flow_server = FlowSocketServer(simple_flow)
     flow_server_proc_ctx = start_processes(
         flow_server.start,
@@ -68,8 +70,9 @@ async def test_sockets(simple_flow: Flow):
         os.kill(p.pid, signal.SIGKILL)
 
 
+@only_py310
 async def test_shm_task_sockets(shm_flow: Flow, array):
-    shm_flow.init_processes(None)
+    shm_flow.init_processes()
     flow_server = FlowSocketServer(shm_flow)
     flow_server_proc_ctx = start_processes(
         flow_server.start,
@@ -79,8 +82,10 @@ async def test_shm_task_sockets(shm_flow: Flow, array):
         start_method='fork',
     )
     pool = SocketConnectionPool()
+    task = ArrayFieldTask(array)
+    task.share_value('array')
 
-    result = await pool.handle([ArrayFieldTask(array)])
+    result = await pool.handle([task])
     assert len(result) == 1
     assert result[0].array[0] == 2
 
@@ -89,6 +94,7 @@ async def test_shm_task_sockets(shm_flow: Flow, array):
         os.kill(p.pid, signal.SIGKILL)
 
 
+@only_py310
 async def test_socket_flow(simple_flow: Flow):
     flow = SocketFlow()
     flow_server_proc_ctx = flow.preload(simple_flow)

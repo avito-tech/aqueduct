@@ -1,5 +1,6 @@
 import asyncio
 import pickle
+import sys
 from contextlib import suppress
 from typing import List, Tuple
 
@@ -8,6 +9,10 @@ from .protocol import SocketProtocol, SocketResponse
 from .. import BaseTask
 from ..exceptions import FlowError
 from ..logger import log
+
+
+if sys.version_info < (3, 10):
+    raise ImportError('aqueduct socket extension requires Python >= 3.10')
 
 
 class OpenConnectionError(Exception):

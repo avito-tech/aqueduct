@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from typing import List, Optional
 
 from .connection_pool import SocketConnectionPool
@@ -8,6 +9,10 @@ from ..flow import Flow
 from ..multiprocessing import ProcessContext, start_processes
 from ..task import BaseTask
 from ..utils import get_env_with_prefix
+
+
+if sys.version_info < (3, 10):
+    raise ImportError('aqueduct socket extension requires Python >= 3.10')
 
 
 class SocketFlow:

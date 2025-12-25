@@ -1,8 +1,13 @@
+import sys
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 from ..task import BaseTask
+
+
+if sys.version_info < (3, 10):
+    raise ImportError('aqueduct socket extension requires Python >= 3.10')
 
 
 @dataclass
