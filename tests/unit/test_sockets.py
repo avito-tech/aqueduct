@@ -7,11 +7,22 @@ import pytest
 from aqueduct.flow import Flow, FlowStep
 from aqueduct.handler import BaseTaskHandler
 from aqueduct.multiprocessing import start_processes
-from aqueduct.sockets.connection_pool import SocketConnectionPool
-from aqueduct.sockets.flow import SocketFlow
 from aqueduct.task import BaseTask
-from aqueduct.sockets.flow_server import FlowSocketServer
 from tests.conftest import only_py310
+
+
+flow = pytest.importorskip(
+    'aqueduct.sockets.flow',
+    reason='aqueduct.sockets.flow requires Python 3.10+',
+)
+connection_pool = pytest.importorskip(
+    'aqueduct.sockets.connection_pool',
+    reason='aqueduct.sockets.connection_pool requires Python 3.10+',
+)
+flow_server = pytest.importorskip(
+    'aqueduct.sockets.flow_server',
+    reason='aqueduct.sockets.flow_server requires Python 3.10+',
+)
 
 
 class Task(BaseTask):
@@ -51,7 +62,7 @@ def shm_flow() -> Flow:
 @only_py310
 async def test_sockets(simple_flow: Flow):
     simple_flow.init_processes()
-    flow_server = FlowSocketServer(simple_flow)
+    flow_server = flow_server.FlowSocketServer(simple_flow)
     flow_server_proc_ctx = start_processes(
         flow_server.start,
         args=(),
@@ -59,7 +70,7 @@ async def test_sockets(simple_flow: Flow):
         daemon=True,
         start_method='fork',
     )
-    pool = SocketConnectionPool()
+    pool = connection_pool.SocketConnectionPool()
 
     result = await pool.handle([Task()])
     assert len(result) == 1
@@ -73,7 +84,7 @@ async def test_sockets(simple_flow: Flow):
 @only_py310
 async def test_shm_task_sockets(shm_flow: Flow, array):
     shm_flow.init_processes()
-    flow_server = FlowSocketServer(shm_flow)
+    flow_server = flow_server.FlowSocketServer(shm_flow)
     flow_server_proc_ctx = start_processes(
         flow_server.start,
         args=(),
@@ -81,7 +92,7 @@ async def test_shm_task_sockets(shm_flow: Flow, array):
         daemon=True,
         start_method='fork',
     )
-    pool = SocketConnectionPool()
+    pool = connection_pool.SocketConnectionPool()
     task = ArrayFieldTask(array)
     task.share_value('array')
 
@@ -96,7 +107,7 @@ async def test_shm_task_sockets(shm_flow: Flow, array):
 
 @only_py310
 async def test_socket_flow(simple_flow: Flow):
-    flow = SocketFlow()
+    flow = flow.SocketFlow()
     flow_server_proc_ctx = flow.preload(simple_flow)
     await flow.start()
 
