@@ -74,6 +74,7 @@ class FlowState(Enum):
     STARTING = 'starting'
     STOPPING = 'stopping'
     STOPPED = 'stopped'
+    STEPS_INITIALIZED = 'steps_initialized'
 
 
 class Flow:
@@ -122,6 +123,10 @@ class Flow:
     def is_running(self) -> bool:
         return self._state == FlowState.RUNNING
 
+    @property
+    def are_steps_initialized(self) -> bool:
+        return self._state == FlowState.STEPS_INITIALIZED
+
     def start(self, timeout: Optional[int] = None):
         """
         Starts Flow and waits for all subprocesses to initialize.
@@ -131,6 +136,21 @@ class Flow:
         log.info('Flow is starting')
         self._state = FlowState.STARTING
         self._run_steps(timeout)
+        self._run_tasks()
+        self._state = FlowState.RUNNING
+        log.info('Flow was started')
+
+    def init_processes(self, timeout: Optional[int] = None):
+        """initialize Flow subprocesses."""
+        log.info('Flow inits step processes')
+        self._run_steps(timeout)
+        self._state = FlowState.STEPS_INITIALIZED
+        log.info('Flow processes are inited')
+
+    def start_inited(self):
+        """Starts Flow instance in main-flow process."""
+        log.info('Flow is starting')
+        self._state = FlowState.STARTING
         self._run_tasks()
         self._state = FlowState.RUNNING
         log.info('Flow was started')
