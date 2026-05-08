@@ -1,3 +1,6 @@
+# 1.13.1
+- Fix subprocess join timeout to allow pytest-cov to collect coverage data from child processes
+
 # 1.13.0
 - Add socket transport to support concurrent web workers compatibility with 1 Flow instance
 
