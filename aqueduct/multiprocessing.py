@@ -158,6 +158,29 @@ class ProcessContext:
         msg += original_trace
         raise ProcessRaisedException(msg, error_index, failed_process.pid)
 
+    def join_all(self, timeout=None):
+        r"""
+        Joins all processes in this context, waiting up to ``timeout`` seconds
+        for each process to exit.
+
+        This method does not raise on non-zero exit codes — it simply waits
+        for processes to finish. Useful for coverage tools (e.g. pytest-cov)
+        that need subprocesses to be properly joined before the parent exits.
+
+        Returns ``True`` if all processes joined within the timeout,
+        ``False`` if any process is still alive.
+
+        Arguments:
+            timeout (float): Seconds to wait per process. ``None`` = block forever.
+        """
+        all_joined = True
+        for process in self.processes:
+            if process.is_alive():
+                process.join(timeout)
+                if process.is_alive():
+                    all_joined = False
+        return all_joined
+
 
 def start_processes(fn, args=(), nprocs=1, join=True, daemon=False,
                     start_method='spawn', on_start_wait: float = 0):

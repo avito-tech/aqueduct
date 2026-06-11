@@ -449,15 +449,16 @@ class Flow:
             await asyncio.sleep(sleep_sec)
 
     @staticmethod
-    def _join_context(context: ProcessContext, timeout_sec: float = 0.01):
-        try:
-            context.join(timeout_sec)
-        except (ProcessExitedException, ProcessRaisedException):
-            pass
-
-        for p in context.processes:
-            if p.is_alive():
-                os.kill(p.pid, signal.SIGKILL)
+    def _join_context(context: ProcessContext, timeout_sec: float = 5.0):
+        # First, try to join processes gracefully using join_all().
+        # This gives subprocesses time to flush coverage data (needed for
+        # pytest-cov subprocess support) and perform other cleanup.
+        # See: https://pytest-cov.readthedocs.io/en/latest/subprocess-support.html
+        if not context.join_all(timeout=timeout_sec):
+            # Some processes didn't exit in time — escalate to SIGKILL.
+            for p in context.processes:
+                if p.is_alive():
+                    os.kill(p.pid, signal.SIGKILL)
 
     @property
     def _processes_context(self) -> ProcessContext:
