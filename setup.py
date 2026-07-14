@@ -3,8 +3,6 @@ from setuptools import find_packages, setup
 with open('README.rst') as f:
     long_description = f.read()
 
-packages = ['aqueduct']
-
 required_setup = [
     'cffi>=1.13.0,<=2.1.0',
     'setuptools>=42.0.0,<=83.0.0',
@@ -26,10 +24,10 @@ extras = {
 
 setup(
     name='aqueduct',
-    packages=find_packages(),
+    packages=find_packages(exclude=['tests', 'tests.*', 'examples', 'examples.*']),
     version='1.14.0',
     license='MIT',
-    license_files='LICENSE.txt',
+    license_files=['LICENSE.txt'],
     author='Data Science SWAT',
     author_email='UnitDataScienceSwat@avito.ru',
     description='Builder for performance-efficient prediction.',

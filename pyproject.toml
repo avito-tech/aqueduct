@@ -1,0 +1,18 @@
+[build-system]
+requires = [
+    "setuptools>=42.0.0,<=83.0.0",
+    "wheel",
+    "cffi>=1.13.0,<=2.1.0",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.cibuildwheel]
+build = "cp38-* cp39-* cp310-* cp311-* cp312-*"
+skip = "pp* *-musllinux_* *-manylinux_i686"
+test-command = "python -c \"from aqueduct.shm._atomic import lib; assert lib.load_uint32\""
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
