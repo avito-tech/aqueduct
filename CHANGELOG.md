@@ -1,3 +1,7 @@
+# 1.14.0
+- Require `cffi` for runtime (regression since v1.12.0)
+- Relax `cffi`, `psutil` and `setuptools` version constraints
+
 # 1.13.1
 - Fix subprocess join timeout to allow pytest-cov to collect coverage data from child processes
 
