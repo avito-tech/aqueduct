@@ -1,3 +1,6 @@
+# 1.15.0
+- Add FastAPI integration (`aqueduct.integrations.fastapi`), `fastapi` extra and example
+
 # 1.14.0
 - Require `cffi` for runtime (regression since v1.12.0)
 - Relax `cffi`, `psutil` and `setuptools` version constraints

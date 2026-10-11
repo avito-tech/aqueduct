@@ -30,6 +30,7 @@ Examples
 ========
 
 - `Aiohttp <examples/aiohttp/>`_
+- `FastAPI <examples/fastapi/>`_
 - `Flask <examples/flask/>`_
 
 Installation
@@ -45,10 +46,12 @@ Moreover, aqueduct has "optional extras"
 
 - ``numpy`` - support types from numpy in shared memory
 - ``aiohttp`` - extension for aiohttp support(see more in examples)
+- ``fastapi`` - extension for FastAPI support(see more in examples)
 
 .. code-block:: shell
 
     pip install aqueduct[numpy,aiohttp]
+    pip install aqueduct[numpy,fastapi]
 
 
 Contact Us

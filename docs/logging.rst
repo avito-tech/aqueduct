@@ -77,3 +77,24 @@ If you use aiohttp integration (`example <../examples/aiohttp>`_), you can pass 
 
     if __name__ == '__main__':
         web.run_app(prepare_app())
+
+
+FastAPI integration
+^^^^^^^^^^^^^^^^^^^
+
+The same ``logger`` parameter is available in the FastAPI integration (`example <../examples/fastapi>`_)
+
+.. code-block:: python
+
+    import logging
+
+    from fastapi import FastAPI
+
+    from aqueduct.integrations.fastapi import AppIntegrator
+    from .flow import get_flow
+
+    custom_logger = logging.getLogger(__name__)
+
+    app = FastAPI()
+    # Here we use logger parameter to setup our custom logger for aqueduct
+    AppIntegrator(app, logger=custom_logger).add_flow(get_flow())
