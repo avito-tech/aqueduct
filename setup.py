@@ -17,6 +17,9 @@ extras = {
     'aiohttp': [
         'aiohttp',
     ],
+    'fastapi': [
+        'fastapi>=0.93',
+    ],
     'numpy': [
         'numpy'
     ]

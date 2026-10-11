@@ -16,3 +16,7 @@ archs = ["x86_64"]
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
+
+[tool.pytest.ini_options]
+# anyio (pulled in by fastapi/httpx) ships a pytest plugin that requires pytest>=7
+addopts = "-p no:anyio"
