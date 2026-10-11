@@ -1,3 +1,8 @@
+# 1.14.1
+- Fix `Flow(..., mp_start_method='spawn')` failing to start with `FileNotFoundError` in `SemLock._rebuild`:
+  keep step `Worker` objects referenced in the parent process so their `mp.RLock` semaphores are not unlinked
+  before spawned subprocesses unpickle them (#66)
+
 # 1.14.0
 - Require `cffi` for runtime (regression since v1.12.0)
 - Relax `cffi`, `psutil` and `setuptools` version constraints
