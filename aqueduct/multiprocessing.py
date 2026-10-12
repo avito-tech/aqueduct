@@ -10,6 +10,7 @@ import multiprocessing.connection
 import signal
 import sys
 import time
+import warnings
 from typing import List, Optional
 
 from .exceptions import AqueductError
@@ -208,7 +209,10 @@ def start_processes(fn, args=(), nprocs=1, join=True, daemon=False,
         daemon (bool): The started processes' daemon flag. If set to True,
                        daemonic processes will be created.
         start_method (string): Start method.
-        on_start_wait (float): Timeout in sec to wait for all subprocesses to start
+        on_start_wait (float): Deprecated, will be removed in 2.0. Extra time in sec to sleep
+            after starting the processes (only for ``nprocs > 1`` and non-fork start methods).
+            It used to paper over a race that made spawned subprocesses fail with
+            FileNotFoundError; the race is fixed in 1.14.1 and the sleep is no longer needed.
 
     Returns:
         None if ``join`` is ``True``,
@@ -231,13 +235,17 @@ def start_processes(fn, args=(), nprocs=1, join=True, daemon=False,
 
     context = ProcessContext(processes, error_queues)
     if not join:
-        # to prevent the parent process from exiting before the child processes have started
-        if nprocs > 1 and start_method != 'fork':
-            if on_start_wait != 0.0:
+        if on_start_wait != 0.0:
+            warnings.warn(
+                'on_start_wait is deprecated and will be removed in aqueduct 2.0: the FileNotFoundError '
+                'on spawned subprocesses start it used to work around is fixed in 1.14.1 '
+                '(https://github.com/avito-tech/aqueduct/issues/66), the sleep is no longer needed',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # keep the legacy behaviour for callers that still pass it explicitly
+            if nprocs > 1 and start_method != 'fork':
                 time.sleep(on_start_wait)
-            else:
-                logger.warning('on_start_wait is not set, '
-                               'may cause FileNotFoundError for heavy weight subprocess.')
         return context
 
     # Loop on join until it returns True or raises an exception.
