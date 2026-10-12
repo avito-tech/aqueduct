@@ -17,6 +17,9 @@ extras = {
     'aiohttp': [
         'aiohttp',
     ],
+    'fastapi': [
+        'fastapi>=0.93',
+    ],
     'numpy': [
         'numpy'
     ]
@@ -25,7 +28,7 @@ extras = {
 setup(
     name='aqueduct',
     packages=find_packages(exclude=['tests', 'tests.*', 'examples', 'examples.*']),
-    version='1.14.1',
+    version='1.15.0',
     license='MIT',
     license_files=['LICENSE.txt'],
     author='Data Science SWAT',

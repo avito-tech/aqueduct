@@ -1,3 +1,6 @@
+# 1.15.0
+- Add FastAPI integration (`aqueduct.integrations.fastapi`), `fastapi` extra and example
+
 # 1.14.1
 - Fix `Flow(..., mp_start_method='spawn')` failing to start with `FileNotFoundError` in `SemLock._rebuild`:
   keep step `Worker` objects referenced in the parent process so their `mp.RLock` semaphores are not unlinked

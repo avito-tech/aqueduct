@@ -5,6 +5,11 @@ import signal
 from typing import Optional
 
 from aqueduct.flow import Flow
+from aqueduct.integrations.utils import (  # noqa: F401 - re-exported for backward compatibility
+    FLOW_START_TIMEOUT_DEFAULT,
+    FLOW_START_TIMEOUT_NAME,
+    get_start_timeout,
+)
 from aqueduct.logger import log, replace_logger
 
 from aiohttp import web
@@ -13,8 +18,6 @@ from aiohttp import web
 AQUEDUCT_FLOW_NAMES = 'aqueduct_flow_names'
 FLOW_NAME = 'flow'
 FLOWS_OBSERVER = 'aqueduct_flows_observer'
-FLOW_START_TIMEOUT_NAME = 'FLOW_START_TIMEOUT'
-FLOW_START_TIMEOUT_DEFAULT = 300.0
 
 
 async def observe_flows(app: web.Application, check_interval: float = 1.):
@@ -43,19 +46,6 @@ async def stop_flows(app):
     flows = [app[name] for name in app[AQUEDUCT_FLOW_NAMES]]
     for flow in flows:  # type: Flow
         await flow.stop()
-
-
-def get_start_timeout() -> Optional[float]:
-    try:
-        start_timeout = float(os.environ.get(
-            FLOW_START_TIMEOUT_NAME,
-            FLOW_START_TIMEOUT_DEFAULT,
-        ))
-    except ValueError:
-        start_timeout = FLOW_START_TIMEOUT_DEFAULT
-    if start_timeout <= 0:
-        return None
-    return start_timeout
 
 
 class AppIntegrator:
