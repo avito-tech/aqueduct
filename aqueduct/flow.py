@@ -94,6 +94,12 @@ class Flow:
         self._steps: List[FlowStep] = [step if isinstance(step, FlowStep)
                                        else FlowStep(step) for step in steps]
         self._contexts: Dict[BaseTaskHandler, ProcessContext] = {}
+        # Workers must stay referenced in the parent process while their subprocesses are
+        # alive: with the 'spawn'/'forkserver' start methods Process.start() drops its own
+        # reference to the target, and a garbage-collected Worker would unlink the named
+        # semaphores of its mp.RLock objects before the child process has unpickled them
+        # (see https://github.com/avito-tech/aqueduct/issues/66)
+        self._workers: List[Worker] = []
         self._queue_priorities = queue_priorities
         self._queues: List[List[FlowStepQueue]] = []
         self._task_futures: Dict[str, asyncio.Future] = {}
@@ -326,6 +332,7 @@ class Flow:
                 read_lock=mp.RLock(),
                 step_number=step_number,
             )
+            self._workers.append(worker_curr)
             self._contexts[step.handler] = start_processes(
                 worker_curr.loop,
                 nprocs=step.nprocs, join=False, daemon=True, start_method=self._mp_start_method,
